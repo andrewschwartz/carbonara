@@ -107,7 +107,7 @@ struct ExportProjectToolTests {
 
         let unknown = await h.runRaw("export_project", args: ["mode": "xml", "outputPath": "/tmp/x.xml", "timelineId": "ffffffff"])
         #expect(unknown.isError)
-        let package = await h.runRaw("export_project", args: ["mode": "package", "outputPath": "/tmp/x.palmier", "timelineId": String(other.id.prefix(8))])
+        let package = await h.runRaw("export_project", args: ["mode": "package", "outputPath": "/tmp/x.nar", "timelineId": String(other.id.prefix(8))])
         #expect(package.isError)
         #expect(ToolHarness.textOf(package).contains("package"))
     }
@@ -136,7 +136,7 @@ struct ExportProjectToolTests {
             source: .external(absolutePath: "/tmp/missing-\(UUID().uuidString).mov"), duration: 1
         )]
         let packageURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("export-tool-\(UUID().uuidString).palmier")
+            .appendingPathComponent("export-tool-\(UUID().uuidString).nar")
         defer { try? FileManager.default.removeItem(at: packageURL) }
         let package = try await h.runOK("export_project", args: [
             "mode": "package", "outputPath": packageURL.path,

@@ -102,9 +102,17 @@ enum Trim {
 }
 
 enum Project {
-    static let fileExtension = "palmier"
+    /// New projects are written as `.nar`; `.palmier` packages remain fully readable.
+    static let fileExtension = "nar"
+    static let legacyFileExtension = "palmier"
     static let registryFilename = "project-registry.json"
-    static let typeIdentifier = "io.palmier.project"
+    static let typeIdentifier = "io.carbonara.project"
+    static let legacyTypeIdentifier = "io.palmier.project"
+
+    static func isProjectPackage(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return ext == fileExtension || ext == legacyFileExtension
+    }
     static let defaultProjectName = "Untitled Project"
     static let timelineFilename = "project.json"
     static let manifestFilename = "media.json"

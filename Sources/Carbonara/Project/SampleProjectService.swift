@@ -155,7 +155,7 @@ final class SampleProjectService {
     func cachedURL(slug: String) -> URL? {
         let dir = Self.cacheSlugDir(slug: slug)
         let contents = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-        return contents?.first { $0.pathExtension == Project.fileExtension }
+        return contents?.first { Project.isProjectPackage($0) }
     }
 
     private static func cacheSlugDir(slug: String) -> URL {

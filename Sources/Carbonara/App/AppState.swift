@@ -220,7 +220,8 @@ final class AppState {
 
     func createProjectInteractively() {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [Self.projectContentType]
+        // New projects are always written as .nar; only opening accepts legacy .palmier.
+        panel.allowedContentTypes = Array(Self.projectContentTypes.prefix(1))
         panel.nameFieldStringValue = Project.defaultProjectName
         panel.directoryURL = Project.storageDirectory
         panel.title = "New Project"
@@ -349,7 +350,7 @@ final class AppState {
 
     func openProjectFromPanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [Self.projectContentType]
+        panel.allowedContentTypes = Self.projectContentTypes
         panel.canChooseDirectories = false
         panel.treatsFilePackagesAsDirectories = false
         panel.allowsMultipleSelection = false
@@ -360,10 +361,18 @@ final class AppState {
         }
     }
 
-    private static let projectContentType: UTType = {
-        UTType(Project.typeIdentifier)
-            ?? UTType(filenameExtension: Project.fileExtension, conformingTo: .package)
-            ?? .package
+    /// Current type first, legacy `.palmier` second — both open identically.
+    private static let projectContentTypes: [UTType] = {
+        var types: [UTType] = []
+        if let current = UTType(Project.typeIdentifier)
+            ?? UTType(filenameExtension: Project.fileExtension, conformingTo: .package) {
+            types.append(current)
+        }
+        if let legacy = UTType(Project.legacyTypeIdentifier)
+            ?? UTType(filenameExtension: Project.legacyFileExtension, conformingTo: .package) {
+            types.append(legacy)
+        }
+        return types.isEmpty ? [.package] : types
     }()
 
 }

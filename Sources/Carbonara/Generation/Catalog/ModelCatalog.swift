@@ -1,0 +1,280 @@
+import Foundation
+
+enum ModelKind: Sendable {
+    case video(VideoModelConfig)
+    case image(ImageModelConfig)
+    case audio(AudioModelConfig)
+    case upscale(UpscaleModelConfig)
+}
+
+enum ModelRegistry {
+    @MainActor static var byId: [String: ModelKind] { ModelCatalog.shared.byId }
+
+    @MainActor static func exists(id: String) -> Bool { byId[id] != nil }
+
+
+    @MainActor static func displayName(for id: String) -> String {
+        switch byId[id] {
+        case .video(let m): m.displayName
+        case .image(let m): m.displayName
+        case .audio(let m): m.displayName
+        case .upscale(let m): m.displayName
+        case .none: id
+        }
+    }
+}
+
+@Observable
+@MainActor
+final class ModelCatalog {
+    static let shared = ModelCatalog()
+
+    private(set) var video: [VideoModelConfig] = []
+    private(set) var image: [ImageModelConfig] = []
+    private(set) var audio: [AudioModelConfig] = []
+    private(set) var upscale: [UpscaleModelConfig] = []
+    private(set) var byId: [String: ModelKind] = [:]
+    private(set) var providerById: [String: String] = [:]
+    private(set) var isLoaded: Bool = false
+    private(set) var lastError: String?
+
+    @ObservationIgnored private var didConfigure = false
+
+    private init() {}
+
+    func configure() {
+        guard !didConfigure else { return }
+        didConfigure = true
+        apply(LocalCatalog.entries)
+    }
+
+    /// Provider that owns a model id (defaults to legacy cloud when unknown).
+    func providerId(for modelId: String) -> String {
+        providerById[modelId] ?? "palmier"
+    }
+
+    private func apply(_ entries: [CatalogEntry]) {
+        var newVideo: [VideoModelConfig] = []
+        var newImage: [ImageModelConfig] = []
+        var newAudio: [AudioModelConfig] = []
+        var newUpscale: [UpscaleModelConfig] = []
+        var newById: [String: ModelKind] = [:]
+        var newProviderById: [String: String] = [:]
+        newVideo.reserveCapacity(entries.count)
+        newImage.reserveCapacity(entries.count)
+        newAudio.reserveCapacity(entries.count)
+        newUpscale.reserveCapacity(entries.count)
+        newById.reserveCapacity(entries.count)
+
+        for entry in entries {
+            newProviderById[entry.id] = entry.provider
+            switch entry.uiCapabilities {
+            case .video(let caps):
+                let m = VideoModelConfig(entry: entry, caps: caps)
+                newVideo.append(m)
+                newById[m.id] = .video(m)
+            case .image(let caps):
+                let m = ImageModelConfig(entry: entry, caps: caps)
+                newImage.append(m)
+                newById[m.id] = .image(m)
+            case .audio(let caps):
+                let m = AudioModelConfig(entry: entry, caps: caps)
+                newAudio.append(m)
+                newById[m.id] = .audio(m)
+            case .upscale(let caps):
+                let m = UpscaleModelConfig(entry: entry, caps: caps)
+                newUpscale.append(m)
+                newById[m.id] = .upscale(m)
+            }
+        }
+
+        self.video = newVideo
+        self.image = newImage
+        self.audio = newAudio
+        self.upscale = newUpscale
+        self.byId = newById
+        self.providerById = newProviderById
+        self.isLoaded = true
+        self.lastError = nil
+    }
+}
+
+struct CatalogEntry: Decodable, Sendable {
+    let id: String
+    let kind: Kind
+    let displayName: String
+    /// Which generation backend owns this model ("fal", "higgsfield", "comfyui", "palmier").
+    let provider: String
+    let allowedEndpoints: [String]
+    let responseShape: ResponseShape
+    let uiCapabilities: UICapabilities
+    let creditsPerSecond: [String: Double]?
+    let audioDiscountRate: [String: Double]?
+    let creditsPerImage: [String: Double]?
+    let qualities: [String]?
+    let audioPricing: AudioPricing?
+    let creditsPerSecondUpscale: Double?
+    let paidOnly: Bool
+
+    /// Local (non-decoded) construction for the built-in provider catalog.
+    init(
+        id: String,
+        kind: Kind,
+        displayName: String,
+        provider: String,
+        uiCapabilities: UICapabilities,
+        responseShape: ResponseShape,
+        allowedEndpoints: [String] = [],
+        creditsPerSecond: [String: Double]? = nil,
+        audioDiscountRate: [String: Double]? = nil,
+        creditsPerImage: [String: Double]? = nil,
+        qualities: [String]? = nil,
+        audioPricing: AudioPricing? = nil,
+        creditsPerSecondUpscale: Double? = nil,
+        paidOnly: Bool = false
+    ) {
+        self.id = id
+        self.kind = kind
+        self.displayName = displayName
+        self.provider = provider
+        self.allowedEndpoints = allowedEndpoints
+        self.responseShape = responseShape
+        self.uiCapabilities = uiCapabilities
+        self.creditsPerSecond = creditsPerSecond
+        self.audioDiscountRate = audioDiscountRate
+        self.creditsPerImage = creditsPerImage
+        self.qualities = qualities
+        self.audioPricing = audioPricing
+        self.creditsPerSecondUpscale = creditsPerSecondUpscale
+        self.paidOnly = paidOnly
+    }
+
+    enum Kind: String, Decodable, Sendable { case video, image, audio, upscale }
+    enum ResponseShape: String, Decodable, Sendable {
+        case video, images, audio, upscaledImage
+    }
+
+    enum UICapabilities: Sendable {
+        case video(VideoCaps)
+        case image(ImageCaps)
+        case audio(AudioCaps)
+        case upscale(UpscaleCaps)
+    }
+
+    enum AudioPricing: Decodable, Sendable {
+        case perThousandChars(rate: Double)
+        case perSecond(rate: Double, textRate: Double?)
+        case flat(price: Double)
+
+        private enum K: String, CodingKey { case mode, rate, textRate, price }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: K.self)
+            switch try c.decode(String.self, forKey: .mode) {
+            case "perThousandChars":
+                self = .perThousandChars(rate: try c.decode(Double.self, forKey: .rate))
+            case "perSecond":
+                self = .perSecond(
+                    rate: try c.decode(Double.self, forKey: .rate),
+                    textRate: try c.decodeIfPresent(Double.self, forKey: .textRate)
+                )
+            case "flat":
+                self = .flat(price: try c.decode(Double.self, forKey: .price))
+            default:
+                throw DecodingError.dataCorruptedError(
+                    forKey: .mode, in: c,
+                    debugDescription: "Unknown audio pricing mode"
+                )
+            }
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, displayName, provider, allowedEndpoints, responseShape, uiCapabilities
+        case creditsPerSecond, audioDiscountRate, creditsPerImage, qualities
+        case audioPricing, creditsPerSecondUpscale, paidOnly
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.kind = try c.decode(Kind.self, forKey: .kind)
+        self.displayName = try c.decode(String.self, forKey: .displayName)
+        self.provider = try c.decodeIfPresent(String.self, forKey: .provider) ?? "palmier"
+        self.allowedEndpoints = try c.decode([String].self, forKey: .allowedEndpoints)
+        self.responseShape = try c.decode(ResponseShape.self, forKey: .responseShape)
+        self.creditsPerSecond = try c.decodeIfPresent([String: Double].self, forKey: .creditsPerSecond)
+        self.audioDiscountRate = try c.decodeIfPresent([String: Double].self, forKey: .audioDiscountRate)
+        self.creditsPerImage = try c.decodeIfPresent([String: Double].self, forKey: .creditsPerImage)
+        self.qualities = try c.decodeIfPresent([String].self, forKey: .qualities)
+        self.audioPricing = try c.decodeIfPresent(AudioPricing.self, forKey: .audioPricing)
+        self.creditsPerSecondUpscale = try c.decodeIfPresent(Double.self, forKey: .creditsPerSecondUpscale)
+        self.paidOnly = try c.decodeIfPresent(Bool.self, forKey: .paidOnly) ?? false
+        switch self.kind {
+        case .video:
+            self.uiCapabilities = .video(try c.decode(VideoCaps.self, forKey: .uiCapabilities))
+        case .image:
+            self.uiCapabilities = .image(try c.decode(ImageCaps.self, forKey: .uiCapabilities))
+        case .audio:
+            self.uiCapabilities = .audio(try c.decode(AudioCaps.self, forKey: .uiCapabilities))
+        case .upscale:
+            self.uiCapabilities = .upscale(try c.decode(UpscaleCaps.self, forKey: .uiCapabilities))
+        }
+    }
+}
+
+struct VideoCaps: Decodable, Sendable {
+    let durations: [Int]
+    let resolutions: [String]?
+    let aspectRatios: [String]
+    let supportsFirstFrame: Bool
+    let supportsLastFrame: Bool
+    let maxReferenceImages: Int
+    let maxReferenceVideos: Int
+    let maxReferenceAudios: Int
+    let maxTotalReferences: Int?
+    let maxCombinedVideoRefSeconds: Double?
+    let maxCombinedAudioRefSeconds: Double?
+    let framesAndReferencesExclusive: Bool
+    let referenceTagNoun: String
+    let requiresSourceVideo: Bool
+    let requiresReferenceImage: Bool
+}
+
+struct ImageCaps: Decodable, Sendable {
+    let resolutions: [String]?
+    let aspectRatios: [String]
+    let qualities: [String]?
+    let supportsImageReference: Bool
+    let maxImages: Int
+}
+
+struct AudioCaps: Decodable, Sendable {
+    let category: String
+    let voices: [String]?
+    let defaultVoice: String?
+    let supportsLyrics: Bool
+    let supportsInstrumental: Bool
+    let supportsStyleInstructions: Bool
+    let durations: [Int]?
+    let durationRange: AudioDurationRange?
+    let minPromptLength: Int
+    let inputs: [String]?
+    let promptLabel: String?
+    let minSeconds: Int?
+    let maxSeconds: Int?
+    let targetLanguages: [String]?
+    let defaultTargetLanguage: String?
+}
+
+struct AudioDurationRange: Decodable, Sendable {
+    let minimum: Int
+    let maximum: Int
+    let defaultValue: Int
+}
+
+struct UpscaleCaps: Decodable, Sendable {
+    let speed: String   // "Fast" | "Medium" | "Slow"
+    let p75DurationSeconds: Int
+    let supportedTypes: [String]   // "video" | "image"
+}

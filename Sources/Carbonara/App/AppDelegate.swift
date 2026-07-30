@@ -1,0 +1,103 @@
+import AppKit
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var isTerminating = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Activate the app (required when launched from CLI, not a .app bundle)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+
+        // Start Sparkle updater
+        _ = Updater.shared
+
+        HomeWindowController.shared.showWindow(nil)
+        Task.detached(priority: .utility) {
+            Project.ensureStorageDirectory()
+        }
+
+        AppNotifications.configure()
+
+        AppState.shared.startMCPService()
+    }
+
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            AppState.shared.showHome()
+        }
+        return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if isTerminating { return .terminateLater }
+        isTerminating = true
+        let projects = AppState.shared.openProjects
+
+        Task { @MainActor in
+            do {
+                for project in projects {
+                    try await project.saveBeforeClosing()
+                }
+                if !MLXRuntime.beginTermination() {
+                    await MLXRuntime.waitUntilIdle()
+                }
+                sender.reply(toApplicationShouldTerminate: true)
+            } catch {
+                projects.forEach { $0.editorViewModel.projectPackageCoordinator.cancelClosing() }
+                isTerminating = false
+                sender.presentError(error)
+                sender.reply(toApplicationShouldTerminate: false)
+            }
+        }
+        return .terminateLater
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            Log.account.notice("url callback ignored url=\(Self.safeURLDescription(url))")
+        }
+    }
+
+    private static func safeURLDescription(_ url: URL) -> String {
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.path = url.path
+        return components.string ?? url.scheme ?? "unknown"
+    }
+
+    @MainActor
+    @objc func newProject(_ sender: Any?) {
+        AppState.shared.createProjectInteractively()
+    }
+
+    @MainActor
+    @objc func openProject(_ sender: Any?) {
+        AppState.shared.openProjectFromPanel()
+    }
+
+    @MainActor
+    @objc func showSettings(_ sender: Any?) {
+        SettingsWindowController.shared.show()
+    }
+
+    @MainActor
+    @objc func showKeyboardShortcuts(_ sender: Any?) {
+        HelpWindowController.shared.show(tab: .shortcuts)
+    }
+
+    @MainActor
+    @objc func showMCPInstructions(_ sender: Any?) {
+        HelpWindowController.shared.show(tab: .mcp)
+    }
+
+    @MainActor
+    @objc func showTutorial(_ sender: Any?) {
+        guard let editor = AppState.shared.activeProject?.editorViewModel else { return }
+        editor.tour.start(in: editor)
+    }
+}

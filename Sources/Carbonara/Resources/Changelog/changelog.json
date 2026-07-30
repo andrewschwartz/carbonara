@@ -1,0 +1,27 @@
+{
+  "changelogURL": "",
+  "entries": [
+    {
+      "version": "0.1.0",
+      "date": "2026-07-24",
+      "sections": [
+        {
+          "heading": "New",
+          "items": [
+            "Carbonara alpha: the AI-native post tool, forked from Palmier Pro",
+            "Pluggable generation providers: bring your own fal.ai key or Higgsfield connection",
+            "Agent-first editing over MCP — drive the timeline from Claude Code, Codex, or Cursor",
+            "On-device transcription and captions with Apple's speech engine"
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "No accounts, credits, or subscriptions — provider keys live in your Keychain",
+            "No telemetry or analytics; diagnostics stay in the local system log"
+          ]
+        }
+      ]
+    }
+  ]
+}

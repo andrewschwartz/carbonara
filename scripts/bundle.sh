@@ -33,18 +33,18 @@ if [ -f "$ROOT/$ENV_FILE" ]; then
   set +a
 fi
 
-SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Palmier, Inc. (MMFLRC7562)}"
-NOTARY_PROFILE="${NOTARY_PROFILE:-palmier-notary}"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"   # set your own Developer ID Application identity
+NOTARY_PROFILE="${NOTARY_PROFILE:-carbonara-notary}"
 SENTRY_DSN="${SENTRY_DSN:-}"
 POSTHOG_PROJECT_TOKEN="${POSTHOG_PROJECT_TOKEN:-}"
 POSTHOG_HOST="${POSTHOG_HOST:-https://us.i.posthog.com}"
-PROVISION_PROFILE="${PROVISION_PROFILE:-$ROOT/scripts/Palmier_Pro_Developer_ID.provisionprofile}"
-ENTITLEMENTS="$ROOT/scripts/PalmierPro.entitlements"
-KEYCHAIN_ACCESS_GROUP="${KEYCHAIN_ACCESS_GROUP:-MMFLRC7562.io.palmier.pro}"
-RESOURCES="$ROOT/Sources/PalmierPro/Resources"
-APP="$ROOT/.build/PalmierPro.app"
-ZIP="$ROOT/.build/PalmierPro.zip"
-DMG="$ROOT/.build/PalmierPro.dmg"
+PROVISION_PROFILE="${PROVISION_PROFILE:-$ROOT/scripts/Carbonara_Developer_ID.provisionprofile}"
+ENTITLEMENTS="$ROOT/scripts/Carbonara.entitlements"
+KEYCHAIN_ACCESS_GROUP="${KEYCHAIN_ACCESS_GROUP:-io.palmier.pro}"
+RESOURCES="$ROOT/Sources/Carbonara/Resources"
+APP="$ROOT/.build/Carbonara.app"
+ZIP="$ROOT/.build/Carbonara.zip"
+DMG="$ROOT/.build/Carbonara.dmg"
 
 echo "==> Building ($CONFIG)"
 TRAITS="BundledSpeech"
@@ -53,13 +53,13 @@ if [ "$CONFIG" = "release" ]; then
 fi
 BUILD_ARGS=(-c "$CONFIG" --traits "$TRAITS")
 swift build "${BUILD_ARGS[@]}"
-BIN="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)/PalmierPro"
+BIN="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)/Carbonara"
 SPARKLE_FW="$ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 
 echo "==> Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
-cp "$BIN" "$APP/Contents/MacOS/PalmierPro"
+cp "$BIN" "$APP/Contents/MacOS/Carbonara"
 cp "$RESOURCES/Info.plist" "$APP/Contents/Info.plist"
 
 if [ -n "$SENTRY_DSN" ]; then
@@ -91,14 +91,11 @@ inject_plist() {
 }
 
 echo "==> Injecting backend config into Info.plist"
-inject_plist PalmierClerkPublishableKey "${CLERK_PUBLISHABLE_KEY:-}"
-inject_plist PalmierConvexDeploymentURL "${CONVEX_DEPLOYMENT_URL:-}"
-inject_plist PalmierConvexHttpURL "${CONVEX_HTTP_URL:-}"
 cp "$RESOURCES/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp -R "$SPARKLE_FW" "$APP/Contents/Frameworks/Sparkle.framework"
 
 # Flatten SwiftPM's resource bundle into the app's Resources tree.
-RES_BUNDLE="$(dirname "$BIN")/PalmierPro_PalmierPro.bundle"
+RES_BUNDLE="$(dirname "$BIN")/Carbonara_Carbonara.bundle"
 if [ -d "$RES_BUNDLE/Fonts" ]; then
   cp -R "$RES_BUNDLE/Fonts" "$APP/Contents/Resources/"
 else
@@ -108,15 +105,15 @@ fi
 
 # Ensure the shipped Claude Desktop connector is always up to date with mcpb/ sources.
 MCPB_SRC="$ROOT/mcpb"
-MCPB_CHECKED_IN="$ROOT/Sources/PalmierPro/Resources/MCPB/palmier-pro.mcpb"
-MCPB_FRESH="$(mktemp -d)/palmier-pro.mcpb"
+MCPB_CHECKED_IN="$ROOT/Sources/Carbonara/Resources/MCPB/carbonara.mcpb"
+MCPB_FRESH="$(mktemp -d)/carbonara.mcpb"
 (cd "$MCPB_SRC" && zip -q -X -r "$MCPB_FRESH" manifest.json icon.png server/index.js server/package.json)
 if ! unzip -p "$MCPB_CHECKED_IN" server/index.js 2>/dev/null | diff -q - <(unzip -p "$MCPB_FRESH" server/index.js) >/dev/null 2>&1 \
   || ! unzip -p "$MCPB_CHECKED_IN" manifest.json 2>/dev/null | diff -q - <(unzip -p "$MCPB_FRESH" manifest.json) >/dev/null 2>&1; then
-  echo "==> refreshing checked-in palmier-pro.mcpb from mcpb/ sources"
+  echo "==> refreshing checked-in carbonara.mcpb from mcpb/ sources"
   cp "$MCPB_FRESH" "$MCPB_CHECKED_IN"
 fi
-cp "$MCPB_FRESH" "$APP/Contents/Resources/palmier-pro.mcpb"
+cp "$MCPB_FRESH" "$APP/Contents/Resources/carbonara.mcpb"
 rm -rf "$(dirname "$MCPB_FRESH")"
 if [ -d "$RES_BUNDLE/Images" ]; then
   cp -R "$RES_BUNDLE/Images" "$APP/Contents/Resources/"
@@ -162,7 +159,7 @@ fi
 mkdir -p "$APP/Contents/Resources/mlx-swift_Cmlx.bundle"
 cp "$MLX_METALLIB" "$APP/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"
 
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/PalmierPro"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Carbonara"
 touch "$APP"
 
 if [ "$MODE" = "fast" ]; then
@@ -173,10 +170,10 @@ if [ "$MODE" = "fast" ]; then
   exit 0
 fi
 
-DSYM="$ROOT/.build/PalmierPro.dSYM"
+DSYM="$ROOT/.build/Carbonara.dSYM"
 echo "==> Generating dSYM"
 rm -rf "$DSYM"
-dsymutil "$APP/Contents/MacOS/PalmierPro" -o "$DSYM"
+dsymutil "$APP/Contents/MacOS/Carbonara" -o "$DSYM"
 
 upload_dsyms() {
   if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
@@ -224,7 +221,6 @@ if [ ! -f "$PROVISION_PROFILE" ]; then
   exit 1
 fi
 cp "$PROVISION_PROFILE" "$APP/Contents/embedded.provisionprofile"
-inject_plist PalmierClerkKeychainAccessGroup "$KEYCHAIN_ACCESS_GROUP"
 
 echo "==> Codesigning main app"
 codesign --force --options runtime --timestamp \
@@ -254,11 +250,11 @@ rm -f "$ZIP"
 echo "==> Building DMG"
 rm -f "$DMG"
 STAGING="$(mktemp -d)"
-cp -R "$APP" "$STAGING/PalmierPro.app"
+cp -R "$APP" "$STAGING/Carbonara.app"
 ln -s /Applications "$STAGING/Applications"
 cp "$RESOURCES/AppIcon.icns" "$STAGING/.VolumeIcon.icns"
 hdiutil create \
-  -volname "PalmierPro" \
+  -volname "Carbonara" \
   -srcfolder "$STAGING" \
   -ov -format UDZO \
   "$DMG"

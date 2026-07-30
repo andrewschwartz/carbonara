@@ -1,133 +1,79 @@
 <div align="center">
 
-# Palmier Pro
+# Carbonara
 
-**The video editor built for AI.**
+**The AI-native post tool.**
 
-<a href="https://github.com/palmier-io/palmier-pro/releases/latest/download/PalmierPro.dmg">
-  <img src="./assets/macos-badge.png" alt="Download Palmier Pro for macOS" width="180" />
-</a>
+Edit, generate, and finish — on your own models.
 
-<sub><i>Requires macOS 26 (Tahoe) on Apple Silicon</i></sub>
-
-<a href="https://x.com/Palmier_io"><img src="https://img.shields.io/badge/Follow-%40Palmier__io-000000?style=flat&logo=x&logoColor=white" alt="Follow on X" /></a>
-<a href="https://discord.com/invite/SMVW6pKYmg"><img src="https://img.shields.io/badge/Join-Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord" /></a>
-<a href="https://www.ycombinator.com/companies/palmier"><img src="https://img.shields.io/badge/Y%20Combinator-S24-orange" alt="Y Combinator S24" /></a>
-<br />
-<a href="https://trendshift.io/repositories/41342?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-41342" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/41342" alt="palmier-io%2Fpalmier-pro | Trendshift" width="250" height="55"/></a>
-
-<p>
-  <strong>English</strong> ·
-  <a href="docs/readme/README.es.md">Español</a> ·
-  <a href="docs/readme/README.zh-CN.md">简体中文</a> ·
-  <a href="docs/readme/README.zh-TW.md">繁體中文</a> ·
-  <a href="docs/readme/README.ja.md">日本語</a> ·
-  <a href="docs/readme/README.ko.md">한국어</a> ·
-  <a href="docs/readme/README.vi.md">Tiếng Việt</a> ·
-  <a href="docs/readme/README.hi.md">हिन्दी</a> ·
-  <a href="docs/readme/README.bn.md">বাংলা</a> ·
-  <a href="docs/readme/README.ar.md">العربية</a> ·
-  <a href="docs/readme/README.it.md">Italiano</a> ·
-  <a href="docs/readme/README.pt-BR.md">Português (Brasil)</a> ·
-  <a href="docs/readme/README.fr.md">Français</a> ·
-  <a href="docs/readme/README.ru.md">Русский</a> ·
-  <a href="docs/readme/README.tr.md">Türkçe</a>
-</p>
+<sub><i>macOS 26 (Tahoe) · Apple Silicon</i></sub>
 
 </div>
 
-<img src="./assets/palmier-ui.png" alt="Palmier Pro UI" width="900" />
-
 ---
 
-Palmier Pro is an open source video editor for Mac. You and your agent can generate and edit videos together inside the timeline.
+Carbonara is a native macOS non-linear editor built for a new kind of post workflow: you and your agents cut, generate, grade, and deliver inside one timeline. No accounts. No credits. No telemetry. Your footage and your API keys never answer to anyone else's cloud.
 
-### Swift-native video editor
+## The editor
 
-We built Palmier Pro from scratch with Swift. The north star is Premiere Pro, with our take on integrating AI into the workflow.
+A from-scratch Swift editor with the instincts of a finishing tool:
 
-### Built-in Generative AI
+- **Timeline** — multi-track, frame-accurate, linked clips, multicam, nested sequences, beat detection.
+- **Color** — a Metal grading pipeline: wheels, curves, hue curves, levels, LUTs (tetrahedral), highlights/shadows, glow, grain, vignette, chroma key.
+- **Sound** — waveforms, metering, music beds, voice enhancement, on-device transcription and captions with word-accurate timing.
+- **Delivery** — hardware-accelerated export, FCPXML interchange, project packages that travel.
 
-Generate videos and images with SOTA models like Seedance, Kling, Nano Banana Pro inside the timeline editor.
+## Generation, on your terms
 
-### Integrates with your agents
+Every generation flows through a pluggable provider layer. Bring the backends you already use:
 
-Connects your Claude/Codex/Cursor via MCP, or use the in-app agent to work on the same project together.
+- **[fal.ai](https://fal.ai)** — hosted frontier models (FLUX, LTX-Video, Stable Audio, MiniMax) with your own key. Paste it in Settings → Providers; verified in one click.
+- **Higgsfield** — connect Carbonara as an MCP client to Higgsfield's hosted generation tools.
+- **ComfyUI** *(in development)* — run local workflow graphs, including LTX-Video director-style shot workflows, straight into your media pool.
 
-## MCP server
+Results land in the project package atomically, resume across relaunches, and undo like any other edit.
 
-When the app is open, it exposes an MCP server at `http://127.0.0.1:19789/mcp` via HTTP. To connect:
+## Built for agents
 
-**Claude Code**
+Carbonara exposes its entire editing surface over MCP. Point Claude Code, Codex, or Cursor at the running app:
+
 ```bash
-claude mcp add --transport http palmier-pro http://127.0.0.1:19789/mcp
+claude mcp add --transport http carbonara http://127.0.0.1:19789/mcp
 ```
 
-**Codex**
+Your agent gets the same tools the in-app agent uses — inspect the timeline, place and trim clips, caption, grade, generate, export — with shared validation and a shared undo history. An edit from your agent is indistinguishable from your own.
+
+The in-app agent panel is optional and runs on your own Anthropic API key.
+
+## Private by architecture
+
+- No sign-in, no subscription, no credit meter.
+- No analytics, no crash reporting — diagnostics stay in the local system log.
+- Transcription runs on-device with Apple's speech engine.
+- Provider keys live in the macOS Keychain and requests go directly to the provider you chose.
+
+## Building
+
+Requires full Xcode 26+ (with the Metal Toolchain component) on Apple Silicon.
+
 ```bash
-codex mcp add palmier-pro --url http://127.0.0.1:19789/mcp
+swift build
+swift run
+swift test
 ```
 
-**Cursor**
+First-time setup on a new machine:
 
-The easiest way is go inside the app `Help` -> `MCP Instructions` -> `Install in Cursor`, or install manually by adding this to `~/.cursor/mcp.json`:
-
-```
-{
-  "mcpServers": {
-    "palmier-pro": {
-      "type": "http",
-      "url": "http://127.0.0.1:19789/mcp"
-    }
-  }
-}
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -runFirstLaunch
+xcodebuild -downloadComponent MetalToolchain
 ```
 
-**Claude Desktop**
+## Lineage
 
-We bundle a [mcpb](https://github.com/modelcontextprotocol/mcpb) with the app that allows a one click install Desktop Extension on Claude Desktop. Go to `Help` -> `MCP Instructions` -> `Install in Claude Desktop`
-
-## FAQ
-
-**Is Palmier Pro fully open source?**
-
-The video editor (without the generative AI features) is fully open source. The MCP server and the agent chat are also open source. The only thing that is closed source is the generative AI processing.
-
-**Is it free?**
-
-The editor is free. You can download it with no login required, and use it as a video editor like CapCut or Adobe Premiere. You can also use the MCP server for free, and start experimenting using Claude Code/Desktop or Cursor to interact with your timeline editor.
-
-Generative AI features require login and subscription.
-
-**What platforms does it support?**
-
-macOS 26 (Tahoe) on Apple Silicon only.
-
-See [FAQ.md](FAQ.md) for more.
-
-## Development
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## Community &amp; Support
-
-- **Discord:** Join the community on **[Discord](https://discord.com/invite/SMVW6pKYmg)**.
-- **Twitter / X:** Follow **[@Palmier_io](https://x.com/Palmier_io)** for updates and announcements.
-- **Instagram:** Follow [@palmier.io](https://www.instagram.com/palmier.io) 
-- **Feedback &amp; Support:** Create a [Github Issue](https://github.com/palmier-io/palmier-pro/issues) or email us at founders@palmier.io
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=palmier-io%2Fpalmier-pro&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=palmier-io/palmier-pro&type=date&theme=dark&legend=top-left&sealed_token=noeYrwWrpHCjd3KdAoj1jK1SLWKED61qQxKmx0oIh1oFzShl6A_eSw-ABZEgU2tm7WymnOSjnRltpeY01CPYhh6TN2aBTS9gH9Op0wMbGe1YW2J10xzGfjOtSir7GL-Nm80Wt1TCZ3bqjICSdSPQCQosZOTax4zLC_wNXYWunWmKvtcclfTbvWTd08AF" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=palmier-io/palmier-pro&type=date&legend=top-left&sealed_token=noeYrwWrpHCjd3KdAoj1jK1SLWKED61qQxKmx0oIh1oFzShl6A_eSw-ABZEgU2tm7WymnOSjnRltpeY01CPYhh6TN2aBTS9gH9Op0wMbGe1YW2J10xzGfjOtSir7GL-Nm80Wt1TCZ3bqjICSdSPQCQosZOTax4zLC_wNXYWunWmKvtcclfTbvWTd08AF" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=palmier-io/palmier-pro&type=date&legend=top-left&sealed_token=noeYrwWrpHCjd3KdAoj1jK1SLWKED61qQxKmx0oIh1oFzShl6A_eSw-ABZEgU2tm7WymnOSjnRltpeY01CPYhh6TN2aBTS9gH9Op0wMbGe1YW2J10xzGfjOtSir7GL-Nm80Wt1TCZ3bqjICSdSPQCQosZOTax4zLC_wNXYWunWmKvtcclfTbvWTd08AF" />
- </picture>
-</a>
+Carbonara is a fork of [Palmier Pro](https://github.com/palmier-io/palmier-pro) by Palmier, Inc. — a remarkable Swift-native editor foundation — rebuilt around local-first, bring-your-own-model generation. Distributed under the same license.
 
 ## License
 
-Copyright (C) 2026 Palmier, Inc.
-
-Palmier Pro is open source under [GPLv3](LICENSE).
+Copyright (C) 2026 Palmier, Inc. (original work). Carbonara modifications are open source under [GPLv3](LICENSE).

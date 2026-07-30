@@ -16,11 +16,11 @@ struct SkillCatalogEntry: Codable, Identifiable, Sendable {
 final class SkillCatalog {
     static let shared = SkillCatalog()
 
-    /// Catalog source. Override with the PALMIER_SKILLS_BASE env var to test against a
-    /// local clone, e.g. file:///path/to/palmier-skills.
+    /// Catalog source. Override with the CARBONARA_SKILLS_BASE env var to test against a
+    /// local clone, e.g. file:///path/to/carbonara-skills.
     static var base: String {
-        ProcessInfo.processInfo.environment["PALMIER_SKILLS_BASE"]
-            ?? "https://raw.githubusercontent.com/palmier-io/palmier-skills/main"
+        ProcessInfo.processInfo.environment["CARBONARA_SKILLS_BASE"]
+            ?? "https://raw.githubusercontent.com/andrschq/carbonara-skills/main"
     }
 
     private(set) var entries: [SkillCatalogEntry] = []

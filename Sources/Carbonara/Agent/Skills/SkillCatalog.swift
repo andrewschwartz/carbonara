@@ -20,7 +20,7 @@ final class SkillCatalog {
     /// local clone, e.g. file:///path/to/carbonara-skills.
     static var base: String {
         ProcessInfo.processInfo.environment["CARBONARA_SKILLS_BASE"]
-            ?? "https://raw.githubusercontent.com/andrschq/carbonara-skills/main"
+            ?? "https://raw.githubusercontent.com/andrewschwartz/carbonara-skills/main"
     }
 
     private(set) var entries: [SkillCatalogEntry] = []

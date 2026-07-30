@@ -136,7 +136,7 @@ b = os.environ["NEW_BUILD"]
 d = os.environ["PUBDATE"]
 l = os.environ["LENGTH"]
 s = os.environ["SIGNATURE"]
-url = f"https://github.com/REPLACE-ME/carbonara/releases/download/v{v}/Carbonara.dmg"
+url = f"https://github.com/andrewschwartz/carbonara/releases/download/v{v}/Carbonara.dmg"
 
 item = f"""        <item>
             <title>Version {v}</title>
@@ -165,4 +165,4 @@ git push origin main
 
 echo ""
 echo "==> Released $TAG"
-echo "    https://github.com/REPLACE-ME/carbonara/releases/tag/$TAG"
+echo "    https://github.com/andrewschwartz/carbonara/releases/tag/$TAG"

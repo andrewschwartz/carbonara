@@ -96,6 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
+    @objc func showBacklot(_ sender: Any?) {
+        BacklotWindowController.shared.show()
+    }
+
+    @MainActor
     @objc func showTutorial(_ sender: Any?) {
         guard let editor = AppState.shared.activeProject?.editorViewModel else { return }
         editor.tour.start(in: editor)

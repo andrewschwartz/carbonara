@@ -138,6 +138,12 @@ enum MainMenuBuilder {
         menu.addItem(.separator())
         menu.addItem(layoutSubmenuItem())
         menu.addItem(.separator())
+
+        let backlotItem = NSMenuItem(title: "Backlot Previs", action: #selector(AppDelegate.showBacklot(_:)), keyEquivalent: "b")
+        backlotItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(backlotItem)
+
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
         item.submenu = menu
         return item

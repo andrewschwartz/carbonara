@@ -51,6 +51,7 @@ let package = Package(
                 "Resources/AppIcon.png",
             ],
             resources: [
+                .copy("Resources/Backlot"),
                 .copy("Resources/Fonts"),
                 .copy("Resources/MCPB/carbonara.mcpb"),
                 .copy("Resources/Images"),

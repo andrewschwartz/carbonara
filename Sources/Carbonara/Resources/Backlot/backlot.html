@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>backlot | block the shot, pick the move, ship the prompt</title>
+<script src="three.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0c0e; --panel:#131518; --panel2:#191c20; --line:#26292e;
+    --ink:#eceae4; --dim:#8b8f96; --tape:#ff6a13; --tape2:#25d0c4;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden}
+  button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  input,select{font-family:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--tape);outline-offset:2px}
+
+  /* ---------- header slate ---------- */
+  header{height:54px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    border-bottom:1px solid var(--line);background:var(--panel)}
+  .slate{display:flex;align-items:baseline;gap:10px;min-width:0}
+  .wordmark{font-weight:800;letter-spacing:.14em;font-size:19px;text-transform:lowercase}
+  .wordmark b{color:var(--tape);font-weight:800}
+  .clap{width:26px;height:16px;border-radius:2px;flex:none;align-self:center;
+    background:repeating-linear-gradient(-45deg,var(--tape) 0 6px,var(--ink) 6px 12px)}
+  .tagline{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.06em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .spacer{flex:1}
+  .hbtn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:8px 12px;
+    border:1px solid var(--line);border-radius:4px;color:var(--ink);white-space:nowrap}
+  .hbtn:hover{border-color:var(--tape);color:var(--tape)}
+
+  /* ---------- layout ---------- */
+  main{display:flex;height:calc(100% - 54px)}
+  #stage{position:relative;flex:1;min-width:0;background:var(--bg)}
+  #stage canvas{display:block;touch-action:none}
+  #panel{width:400px;flex:none;border-left:1px solid var(--line);background:var(--panel);
+    overflow-y:auto;overscroll-behavior:contain}
+  @media (max-width:860px){
+    main{flex-direction:column}
+    #stage{flex:none;height:44vh}
+    #panel{width:100%;flex:1;border-left:none;border-top:1px solid var(--line)}
+  }
+  .hint{position:absolute;top:10px;left:12px;font-family:var(--mono);font-size:10px;
+    color:var(--dim);letter-spacing:.05em;pointer-events:none;text-transform:uppercase}
+
+  /* ---------- monitor ---------- */
+  #monitor{position:absolute;left:12px;bottom:12px;width:min(46%,320px);
+    border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#000;
+    box-shadow:0 8px 30px rgba(0,0,0,.55)}
+  #monitor canvas{display:block;width:100%;height:auto}
+  .mon-ui{position:absolute;inset:0;pointer-events:none;font-family:var(--mono);
+    font-size:9px;letter-spacing:.08em;color:rgba(236,234,228,.9)}
+  .mon-ui .corner{position:absolute;width:14px;height:14px;border-color:rgba(236,234,228,.55);border-style:solid;border-width:0}
+  .c-tl{top:6px;left:6px;border-top-width:1px;border-left-width:1px}
+  .c-tr{top:6px;right:6px;border-top-width:1px;border-right-width:1px}
+  .c-bl{bottom:6px;left:6px;border-bottom-width:1px;border-left-width:1px}
+  .c-br{bottom:6px;right:6px;border-bottom-width:1px;border-right-width:1px}
+  .cross{position:absolute;top:50%;left:50%;width:12px;height:12px;transform:translate(-50%,-50%)}
+  .cross::before,.cross::after{content:"";position:absolute;background:rgba(236,234,228,.5)}
+  .cross::before{left:50%;top:0;width:1px;height:100%}
+  .cross::after{top:50%;left:0;height:1px;width:100%}
+  .mon-tag{position:absolute;padding:2px 5px;background:rgba(0,0,0,.45)}
+  #mLens{top:8px;right:8px}
+  #mCam{top:8px;left:8px;color:var(--tape2)}
+  #mData{bottom:8px;left:8px}
+  #mRec{bottom:8px;right:8px;display:none;align-items:center;gap:5px;color:#ff4a3d}
+  #mRec.on{display:flex}
+  #mRec i{width:7px;height:7px;border-radius:50%;background:#ff4a3d;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:.15}}
+  @media (prefers-reduced-motion:reduce){#mRec i{animation:none}}
+
+  /* ---------- panel sections ---------- */
+  section{padding:16px 16px 20px;border-bottom:1px solid var(--line)}
+  .tape-label{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;
+    letter-spacing:.16em;text-transform:uppercase;color:#161006;background:var(--tape);
+    padding:3px 9px;transform:rotate(-1.2deg);margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+  .tape-label.teal{background:var(--tape2);color:#06211f}
+  .tape-label.white{background:var(--ink);color:#161616}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .row label{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--dim);
+    text-transform:uppercase;width:70px;flex:none}
+  .row output{font-family:var(--mono);font-size:11px;width:58px;flex:none;text-align:right;color:var(--ink)}
+  input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:2px;background:var(--line);border-radius:2px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--ink);border:3px solid var(--panel);box-shadow:0 0 0 1px var(--line);cursor:grab}
+  input[type=range]:active::-webkit-slider-thumb{background:var(--tape)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ink);border:none;cursor:grab}
+  select{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:7px 9px;font-family:var(--mono);font-size:11px;flex:1;min-width:0}
+  .lens-set{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .lens{font-family:var(--mono);font-size:11px;padding:6px 10px;border:1px solid var(--line);
+    border-radius:3px;color:var(--dim)}
+  .lens.on{border-color:var(--tape);color:var(--tape);background:rgba(255,106,19,.08)}
+  .reset{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;
+    text-decoration:underline;text-underline-offset:3px}
+  .reset:hover{color:var(--ink)}
+
+  /* ---------- actors ---------- */
+  .preset-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;
+    scrollbar-width:thin}
+  .preset{font-family:var(--mono);font-size:10px;letter-spacing:.05em;padding:6px 10px;
+    border:1px dashed var(--line);border-radius:3px;color:var(--dim);white-space:nowrap;flex:none;
+    text-transform:uppercase}
+  .preset:hover{border-color:var(--ink);color:var(--ink)}
+  .actor-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .achip{font-family:var(--mono);font-size:12px;font-weight:700;width:34px;height:34px;
+    border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;
+    color:var(--dim)}
+  .achip.on{border-color:var(--tape2);color:var(--tape2);background:rgba(37,208,196,.08)}
+  .achip.add{color:var(--dim);font-weight:400}
+  .achip.add:hover{border-color:var(--ink);color:var(--ink)}
+  .actor-tools{display:flex;gap:8px;margin-top:4px}
+  .tool{flex:1;font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:9px 6px;
+    border:1px solid var(--line);border-radius:4px;text-transform:uppercase;text-align:center;color:var(--ink)}
+  .tool:hover{border-color:var(--tape2);color:var(--tape2)}
+  .tool.danger:hover{border-color:#ff4a3d;color:#ff4a3d}
+  .note{font-family:var(--mono);font-size:9.5px;color:var(--dim);line-height:1.6;margin-top:10px}
+
+  /* ---------- library ---------- */
+  #search{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:9px 11px;font-family:var(--mono);font-size:12px;margin-bottom:10px}
+  #search::placeholder{color:var(--dim)}
+  .cats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .cat{font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:5px 9px;
+    border:1px solid var(--line);border-radius:20px;color:var(--dim);text-transform:uppercase}
+  .cat.on{border-color:var(--tape2);color:var(--tape2);background:rgba(37,208,196,.07)}
+  .count{font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:10px;letter-spacing:.06em}
+  .card{border:1px solid var(--line);border-radius:5px;padding:10px;margin-bottom:8px;
+    cursor:pointer;background:var(--panel2);transition:border-color .15s;display:flex;gap:11px}
+  .card:hover{border-color:#3a3e45}
+  .card.sel{border-color:var(--tape);box-shadow:0 0 0 1px var(--tape)}
+  .thumb{width:96px;height:60px;flex:none;background:#0d0e10;border:1px solid var(--line);
+    border-radius:3px}
+  .card-body{flex:1;min-width:0}
+  .card-top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .card-name{font-size:12.5px;font-weight:600;flex:1;line-height:1.25}
+  .card-copy{font-family:var(--mono);font-size:10px;color:var(--dim);padding:3px 7px;
+    border:1px solid var(--line);border-radius:3px;flex:none}
+  .card-copy:hover{color:var(--ink);border-color:var(--dim)}
+  .card-cat{font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--tape2);
+    text-transform:uppercase;display:block;margin-bottom:4px}
+  .card p{font-family:var(--mono);font-size:10px;line-height:1.5;color:var(--dim);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card.sel p{color:#b9bdc4;-webkit-line-clamp:unset}
+  .card .playing{display:none;font-family:var(--mono);font-size:9px;color:var(--tape);
+    letter-spacing:.1em;margin-top:5px}
+  .card.sel .playing{display:block}
+
+  /* ---------- prompt + export ---------- */
+  #promptBox{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:5px;
+    padding:12px;font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--ink);
+    min-height:110px;white-space:pre-wrap;word-break:break-word}
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .btn{flex:1;font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:11px 6px;
+    border-radius:4px;text-transform:uppercase;text-align:center}
+  .btn-primary{background:var(--tape);color:#161006;font-weight:700}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-ghost{border:1px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--tape2);color:var(--tape2)}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(8px);
+    background:var(--ink);color:#111;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    padding:9px 16px;border-radius:4px;opacity:0;pointer-events:none;transition:all .25s;z-index:99;
+    max-width:86vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  footer{padding:14px 16px 28px;font-family:var(--mono);font-size:10px;color:var(--dim);
+    letter-spacing:.05em;line-height:1.7}
+  .hidden-input{display:none}
+  .txt{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+    padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--ink);margin-bottom:8px}
+  .row .txt{margin-bottom:0}
+  .ta{min-height:54px;resize:vertical}
+  .adv{margin-top:12px}
+  .adv summary{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;
+    text-transform:uppercase;cursor:pointer;margin-bottom:10px}
+  .advl{display:block;font-family:var(--mono);font-size:9.5px;color:var(--dim);
+    letter-spacing:.06em;text-transform:uppercase;margin:6px 0 4px}
+  .genstatus{font-family:var(--mono);font-size:10.5px;color:var(--tape);letter-spacing:.05em;
+    margin-top:10px;min-height:14px;word-break:break-word}
+  #genResult{margin-top:10px}
+  #genResult img,#genResult video{width:100%;border:1px solid var(--line);border-radius:5px;display:block}
+  #genResult a{font-family:var(--mono);font-size:10px;color:var(--tape2);display:inline-block;margin-top:6px}
+  .binrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+  .shot{flex:none;width:96px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);
+    cursor:pointer;padding:4px}
+  .shot.on{border-color:var(--tape)}
+  .shot img{width:100%;display:block;border-radius:2px;background:#000;object-fit:cover}
+  .shot .sname{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:3px;
+    display:flex;justify-content:space-between;align-items:center}
+  .shot .sdel{color:var(--dim);font-size:12px;line-height:1}
+  .shot .sdel:hover{color:#ff4a3d}
+  #monWrap{position:relative}
+  #transport{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--panel);
+    border-top:1px solid var(--line)}
+  #transport button{font-family:var(--mono);font-size:10px;color:var(--ink);
+    border:1px solid var(--line);border-radius:3px;padding:3px 8px;flex:none}
+  #transport button.on{color:var(--tape2);border-color:var(--tape2)}
+  #tScrub{flex:1}
+  .thirds{position:absolute;inset:0;display:none;pointer-events:none}
+  .mon-ui.showthirds .thirds{display:block}
+  .thirds i{position:absolute;background:rgba(236,234,228,.25)}
+  .thirds .v1{left:33.33%;top:0;width:1px;height:100%}
+  .thirds .v2{left:66.66%;top:0;width:1px;height:100%}
+  .thirds .h1{top:33.33%;left:0;height:1px;width:100%}
+  .thirds .h2{top:66.66%;left:0;height:1px;width:100%}
+  .thirds .safe{position:absolute;inset:6.5%;border:1px dashed rgba(236,234,228,.22)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="clap" aria-hidden="true"></div>
+  <div class="slate">
+    <div class="wordmark">back<b>lot</b></div>
+    <div class="tagline">block the shot / pick the move / ship the prompt</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="hbtn" id="exportTop">Export frame</button>
+</header>
+
+<main>
+  <div id="stage">
+    <div class="hint">drag actors to re-mark &middot; drag empty space to orbit &middot; pinch or scroll to zoom</div>
+    <div id="monitor">
+      <div id="monWrap">
+        <canvas id="monCanvas"></canvas>
+        <div class="mon-ui" id="monUI">
+          <span class="corner c-tl"></span><span class="corner c-tr"></span>
+          <span class="corner c-bl"></span><span class="corner c-br"></span>
+          <span class="cross"></span>
+          <div class="thirds"><i class="v1"></i><i class="v2"></i><i class="h1"></i><i class="h2"></i><span class="safe"></span></div>
+          <span class="mon-tag" id="mCam">A CAM</span>
+          <span class="mon-tag" id="mLens">35MM</span>
+          <span class="mon-tag" id="mData">D 4.0M &middot; H 1.6M</span>
+          <span class="mon-tag" id="mRec"><i></i>MOVE</span>
+        </div>
+      </div>
+      <div id="transport">
+        <button id="tPlay" title="play / pause the move (space)">&#10074;&#10074;</button>
+        <input type="range" id="tScrub" min="0" max="1" value="0" step="0.001" title="scrub the move">
+        <button id="tThirds" title="thirds and safe overlay">#</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="panel">
+
+    <section>
+      <span class="tape-label">Shot bin</span>
+      <div class="binrow" id="binRow"></div>
+      <div class="actions" style="margin-top:8px">
+        <button class="btn btn-ghost" id="binAdd">+ Shot</button>
+        <button class="btn btn-ghost" id="binUpdate">Update</button>
+        <button class="btn btn-primary" id="binCoverage">Coverage</button>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="binSave">Export bin</button>
+        <button class="btn btn-ghost" id="binLoad">Import bin</button>
+      </div>
+      <input type="file" id="binInput" class="hidden-input" accept=".json">
+      <div class="note">Each card stores the whole board: camera, look, actors, set, dome and move,
+      with a thumbnail from the A cam. Tap to recall. The bin lives in this session only,
+      so export it with your day's work.</div>
+    </section>
+
+    <section>
+      <span class="tape-label">Camera</span>
+      <button class="reset" id="resetCam" style="float:right">reset</button>
+      <div class="lens-set" id="lensSet"></div>
+      <div class="row"><label for="rAngle">Angle</label><input type="range" id="rAngle" min="-180" max="180" value="24" step="1"><output id="oAngle">24&deg;</output></div>
+      <div class="row"><label for="rDist">Distance</label><input type="range" id="rDist" min="1" max="12" value="4" step="0.1"><output id="oDist">4.0m</output></div>
+      <div class="row"><label for="rHeight">Height</label><input type="range" id="rHeight" min="0.2" max="6" value="1.6" step="0.1"><output id="oHeight">1.6m</output></div>
+      <div class="row"><label for="rDutch">Dutch</label><input type="range" id="rDutch" min="-25" max="25" value="0" step="1"><output id="oDutch">0&deg;</output></div>
+      <div class="row"><label for="lookSel">Frame on</label><select id="lookSel"></select></div>
+      <div class="row"><label for="rAimH">Aim height</label><input type="range" id="rAimH" min="0.2" max="2.2" value="1.4" step="0.05"><output id="oAimH">1.40m</output></div>
+      <div class="row"><label for="rPanT">Pan trim</label><input type="range" id="rPanT" min="-25" max="25" value="0" step="0.5"><output id="oPanT">0&deg;</output></div>
+      <div class="row"><label for="rTiltT">Tilt trim</label><input type="range" id="rTiltT" min="-25" max="25" value="0" step="0.5"><output id="oTiltT">0&deg;</output></div>
+      <div class="row" style="margin-bottom:8px"><label>Keys</label>
+        <button class="tool" id="keyAdd" style="flex:1">Set key</button>
+        <button class="tool" id="keyPlay" style="flex:1">Play keys</button>
+        <button class="tool danger" id="keyClear" style="flex:0 0 auto;padding:9px 10px">Clear</button>
+      </div>
+      <div class="actor-chips" id="keyChips" style="margin-bottom:0"></div>
+    </section>
+
+    <section>
+      <span class="tape-label">Look</span>
+      <div class="row"><label for="kitSel">Lens kit</label><select id="kitSel"></select></div>
+      <div class="row"><label for="stockSel">Stock</label><select id="stockSel"></select></div>
+      <div class="row"><label for="lightSel">Lighting</label><select id="lightSel"></select></div>
+      <div class="row"><label for="styleSel">Style</label><select id="styleSel"></select></div>
+      <div class="row"><label for="apSel">Aperture</label><select id="apSel"></select></div>
+      <div class="row"><label for="lookNotes">Notes</label><input id="lookNotes" class="txt" placeholder="era, palette, references" autocomplete="off"></div>
+    </section>
+
+    <section>
+      <span class="tape-label white">Set pieces</span>
+      <div class="preset-row" id="setPresetRow"></div>
+      <div class="actor-chips" id="pieceChips"></div>
+      <div class="row"><label for="pType">Add</label><select id="pType"></select><button class="tool" id="addPiece" style="flex:0 0 auto;padding:7px 14px">+</button></div>
+      <div class="row"><label for="pX">X</label><input type="range" id="pX" min="-10" max="10" value="0" step="0.1"><output id="oPX">0.0m</output></div>
+      <div class="row"><label for="pZ">Z</label><input type="range" id="pZ" min="-10" max="10" value="0" step="0.1"><output id="oPZ">0.0m</output></div>
+      <div class="row"><label for="pRot">Rotate</label><input type="range" id="pRot" min="-180" max="180" value="0" step="1"><output id="oPRot">0&deg;</output></div>
+      <div class="row"><label for="pScale">Scale</label><input type="range" id="pScale" min="0.4" max="3" value="1" step="0.05"><output id="oPScale">1.00x</output></div>
+      <div class="actor-tools">
+        <button class="tool" id="dupPiece">Duplicate</button>
+        <button class="tool danger" id="removePiece">Remove</button>
+      </div>
+      <div class="note">Drag pieces on the floor in the viewport, same as actors. Everything
+      here lands in the greybox OBJ export in its placed position.</div>
+    </section>
+
+    <section>
+      <span class="tape-label teal">Set &middot; 360 dome</span>
+      <div class="preset-row" id="panoRow"></div>
+      <div class="actions" style="margin-top:0">
+        <button class="btn btn-ghost" id="load360">Import 360</button>
+        <button class="btn btn-ghost" id="clear360">Clear</button>
+      </div>
+      <input type="file" id="d360Input" class="hidden-input" accept="image/*">
+      <div class="row" style="margin-top:12px"><label for="panoPrompt">Gen</label><input id="panoPrompt" class="txt" placeholder="describe a location to generate" autocomplete="off"></div>
+      <div class="actions" style="margin-top:0">
+        <button class="btn btn-ghost" id="gen360">Generate 360 via fal</button>
+      </div>
+      <div class="row" style="margin-top:12px"><label for="dRot">Rotate</label><input type="range" id="dRot" min="-180" max="180" value="0" step="1"><output id="oDRot">0&deg;</output></div>
+      <div class="row"><label for="dHor">Horizon</label><input type="range" id="dHor" min="0.6" max="4" value="1.6" step="0.05"><output id="oDHor">1.60m</output></div>
+      <div class="row"><label for="dSize">Dome size</label><input type="range" id="dSize" min="10" max="60" value="30" step="1"><output id="oDSize">30m</output></div>
+      <div class="row"><label for="dBright">Bright</label><input type="range" id="dBright" min="0.2" max="2" value="1" step="0.05"><output id="oDBright">1.00</output></div>
+      <label class="advl"><input type="checkbox" id="dGround" checked> Project onto ground plane</label>
+      <label class="advl"><input type="checkbox" id="dShowSet" checked> Show greybox set pieces</label>
+      <div class="note">Equirectangular 360 stills, jpg or png. The image wraps a dome around the
+      stage and the lower half reprojects onto a walkable ground plane, same trick as the
+      Blender setup. Horizon is the projection height: set it to the height the plate was
+      shot at and verticals stay straight. Actors still cast soft shadows onto the plate.</div>
+    </section>
+
+    <section>
+      <span class="tape-label white">Actors &amp; blocking</span>
+      <div class="preset-row" id="presetRow"></div>
+      <div class="actor-chips" id="actorChips"></div>
+      <div class="row"><label for="aX">Mark X</label><input type="range" id="aX" min="-6" max="6" value="0" step="0.1"><output id="oAX">0.0m</output></div>
+      <div class="row"><label for="aZ">Mark Z</label><input type="range" id="aZ" min="-6" max="6" value="0" step="0.1"><output id="oAZ">0.0m</output></div>
+      <div class="row"><label for="aFace">Facing</label><input type="range" id="aFace" min="-180" max="180" value="0" step="1"><output id="oAFace">0&deg;</output></div>
+      <div class="row"><label for="aModel">Model</label><select id="aModel"></select></div>
+      <div class="row"><label for="aAnim">Action</label><select id="aAnim"></select></div>
+      <div class="actor-tools">
+        <button class="tool" id="importChar">Import .glb</button>
+        <button class="tool danger" id="removeActor">Remove</button>
+      </div>
+      <input type="file" id="glbInput" class="hidden-input" accept=".glb,.gltf">
+      <div class="note">Import a rigged character as .glb with its clips baked in. Mixamo rigs
+      export as FBX, so convert to GLB first (Blender: import FBX, export glTF binary).
+      Materials load as flat color, which suits the greybox.</div>
+    </section>
+
+    <section>
+      <span class="tape-label teal">Movement library</span>
+      <input id="search" type="search" placeholder="Search a move: dolly, whip, orbit...">
+      <div class="cats" id="cats"></div>
+      <div class="count" id="count"></div>
+      <div id="cards"></div>
+    </section>
+
+    <section>
+      <span class="tape-label">Prompt &amp; export</span>
+      <div id="promptBox" aria-live="polite"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="copyPrompt">Copy prompt</button>
+        <button class="btn btn-ghost" id="exportFrame">Export frame</button>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="exportOBJ">Greybox .obj</button>
+        <button class="btn btn-ghost" id="saveShot">Save shot</button>
+        <button class="btn btn-ghost" id="loadShot">Load shot</button>
+      </div>
+      <input type="file" id="shotInput" class="hidden-input" accept=".json">
+    </section>
+
+    <section>
+      <span class="tape-label teal">Generate</span>
+      <div class="row"><label for="falKey">fal key</label><input type="password" id="falKey" class="txt" placeholder="FAL_KEY, kept in memory only" autocomplete="off"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="genStill">Still</button>
+        <button class="btn btn-primary" id="genVideo">Video &middot; Seedance</button>
+      </div>
+      <div class="genstatus" id="genStatus"></div>
+      <div id="genResult"></div>
+      <details class="adv">
+        <summary>Endpoints &amp; payloads</summary>
+        <label class="advl" for="epStill">Still endpoint</label>
+        <input class="txt" id="epStill" value="fal-ai/bytedance/seedream/v4/edit">
+        <label class="advl" for="plStill">Still payload &middot; {PROMPT} {IMAGE} {W} {H}</label>
+        <textarea class="txt ta" id="plStill">{"prompt":"{PROMPT}","image_urls":["{IMAGE}"],"image_size":{"width":"{W}","height":"{H}"}}</textarea>
+        <label class="advl" for="epVideo">Video endpoint</label>
+        <input class="txt" id="epVideo" value="bytedance/seedance-2.0/image-to-video">
+        <label class="advl" for="plVideo">Video payload &middot; {PROMPT} {IMAGE} {IMAGE_END} {ASPECT}</label>
+        <textarea class="txt ta" id="plVideo">{"prompt":"{PROMPT}","image_url":"{IMAGE}","end_image_url":"{IMAGE_END}","resolution":"1080p","aspect_ratio":"{ASPECT}"}</textarea>
+        <label class="advl"><input type="checkbox" id="useEndFrame" checked> Send move end frame as the video's last frame</label>
+        <label class="advl" for="epPano">360 endpoint</label>
+        <input class="txt" id="epPano" value="fal-ai/bytedance/seedream/v4/text-to-image">
+        <label class="advl" for="plPano">360 payload &middot; {PROMPT}</label>
+        <textarea class="txt ta" id="plPano">{"prompt":"{PROMPT}","image_size":{"width":4096,"height":2048}}</textarea>
+        <label class="advl"><input type="checkbox" id="up4k" checked> Upscale video to 4K after generation</label>
+        <input class="txt" id="epUp" value="fal-ai/topaz/upscale/video">
+        <textarea class="txt ta" id="plUp">{"video_url":"{VIDEO}","upscale_factor":2}</textarea>
+      </details>
+      <div class="note">Sends the current A cam frame plus the composed prompt to your fal account.
+      The key lives in this page's memory only and goes nowhere except fal.
+      Stills drop the movement paragraph; video keeps it.</div>
+    </section>
+
+    <footer>
+      Greybox export writes the set, posed actors and the A cam as a grouped OBJ in
+      meters, Y up, ready for Blender or Unreal. Save shot keeps the full blocking,
+      camera and move as JSON you can reload here. Reference frames export from the
+      A cam monitor as PNG.
+    </footer>
+  </div>
+</main>
+
+<div class="toast" id="toast">COPIED</div>
+
+<script>
+(function(){
+"use strict";
+var M = THREE.MathUtils;
+var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var V3 = function(x,y,z){ return new THREE.Vector3(x,y,z); };
+
+/* ==================== movement library (original prompt text) ==================== */
+var MOVES = [
+ {id:"static",n:"Static hold",c:"Hold",view:"top",p:"Locked-off static shot. Hold one fixed camera position, angle and framing for the entire clip with zero drift, ending on the exact same composition."},
+ {id:"timelapse",n:"Time-lapse hold",c:"Hold",view:"top",p:"Locked-camera time-lapse. Keep the camera perfectly fixed while time compresses and motion streaks through the frame, holding one unchanging composition throughout."},
+ {id:"panR",n:"Pan right",c:"Pan/Tilt",view:"top",p:"Pan right. Rotate the camera horizontally from a fixed position at an even pace, letting fresh space enter from the right edge, then settle cleanly on the new composition."},
+ {id:"panL",n:"Pan left",c:"Pan/Tilt",view:"top",p:"Pan left. Rotate the camera horizontally from a fixed position at an even pace, letting fresh space enter from the left edge, then settle cleanly on the new composition."},
+ {id:"whipR",n:"Whip pan right",c:"Pan/Tilt",view:"top",p:"Whip pan right. Snap the camera rapidly toward a new target on the right with motion blur mid-swing, landing sharp and stable on a second readable frame."},
+ {id:"whipL",n:"Whip pan left",c:"Pan/Tilt",view:"top",p:"Whip pan left. Snap the camera rapidly toward a new target on the left with motion blur mid-swing, landing sharp and stable on a second readable frame."},
+ {id:"tiltUp",n:"Tilt up",c:"Pan/Tilt",view:"side",p:"Tilt up. Pivot the camera upward from a fixed position at a steady rate, traveling up the subject or architecture, and come to rest on the upper target."},
+ {id:"tiltDown",n:"Tilt down",c:"Pan/Tilt",view:"side",p:"Tilt down. Pivot the camera downward from a fixed position at a steady rate, traveling down the subject or architecture, and come to rest on the lower target."},
+ {id:"zoomIn",n:"Slow zoom in",c:"Lens",view:"top",p:"Slow zoom in. Gradually lengthen the focal length toward a tighter frame without moving the camera body, keeping the subject centered as it grows, ending settled."},
+ {id:"zoomOut",n:"Slow zoom out",c:"Lens",view:"top",p:"Slow zoom out. Gradually shorten the focal length toward a wider frame without moving the camera body, revealing surrounding space evenly, ending settled."},
+ {id:"crashIn",n:"Crash zoom in",c:"Lens",view:"top",p:"Crash zoom in. Punch the focal length in hard and fast toward the subject, an abrupt aggressive scale jump that lands on a bold tight frame."},
+ {id:"vertigo",n:"Dolly zoom (vertigo)",c:"Lens",view:"side",p:"Dolly zoom. Push the camera physically toward the subject while zooming the lens wider at a matched rate, so the subject holds its size while the background stretches and warps away."},
+ {id:"dollyIn",n:"Dolly in",c:"Dolly/Track",view:"top",p:"Dolly in. Move the camera body forward in a straight controlled line toward the subject, closing distance smoothly while height and aim stay constant, finishing tighter."},
+ {id:"dollyOut",n:"Dolly out",c:"Dolly/Track",view:"top",p:"Dolly out. Move the camera body backward in a straight controlled line away from the subject, opening distance smoothly while height and aim stay constant, finishing wider."},
+ {id:"truckR",n:"Truck right",c:"Dolly/Track",view:"top",p:"Truck right. Slide the whole camera laterally to the right on a straight path with the lens direction locked, letting the scene glide across the frame with visible parallax."},
+ {id:"truckL",n:"Truck left",c:"Dolly/Track",view:"top",p:"Truck left. Slide the whole camera laterally to the left on a straight path with the lens direction locked, letting the scene glide across the frame with visible parallax."},
+ {id:"track",n:"Tracking shot",c:"Dolly/Track",view:"top",p:"Tracking shot. Travel through the scene alongside the subject at their pace, holding them steady in frame while the environment streams past."},
+ {id:"revTrack",n:"Reverse tracking (walk-and-talk)",c:"Dolly/Track",view:"top",p:"Reverse tracking shot. Glide backward directly in front of the advancing subject at their pace, holding stable front-on framing while the background recedes behind them."},
+ {id:"sideTrack",n:"Side tracking",c:"Dolly/Track",view:"top",p:"Side tracking shot. Travel parallel to the subject at matched speed, holding them in clean profile at a fixed distance with strong horizontal motion through the frame."},
+ {id:"lowTrack",n:"Low tracking",c:"Dolly/Track",view:"side",p:"Low tracking shot. Skim along near ground level beside the subject's path, keeping the low detail sharp while the floor plane rushes through the frame."},
+ {id:"pedUp",n:"Pedestal up",c:"Crane/Aerial",view:"side",p:"Pedestal up. Raise the entire camera straight up with the lens held level, so the framing travels vertically without tilting, finishing at the higher position."},
+ {id:"pedDown",n:"Pedestal down",c:"Crane/Aerial",view:"side",p:"Pedestal down. Lower the entire camera straight down with the lens held level, so the framing travels vertically without tilting, finishing at the lower position."},
+ {id:"craneUp",n:"Crane up",c:"Crane/Aerial",view:"side",p:"Crane up. Lift the camera smoothly through open air while tilting down to keep the subject in frame, expanding scale as the ground plane opens up beneath."},
+ {id:"craneDown",n:"Crane down",c:"Crane/Aerial",view:"side",p:"Crane down. Descend the camera smoothly through open air while easing the tilt up, closing scale until it arrives level with the subject or destination."},
+ {id:"dronePush",n:"Drone push in",c:"Crane/Aerial",view:"side",p:"Drone push in. Fly forward and gently downward on a smooth aerial glide toward the subject, arriving at a closer, lower composition."},
+ {id:"dronePull",n:"Drone pull back",c:"Crane/Aerial",view:"side",p:"Drone pull back. Fly backward and gently upward on a smooth aerial glide away from the subject, revealing more of the surrounding landscape as it recedes."},
+ {id:"overhead",n:"Top-down overhead",c:"Crane/Aerial",view:"side",p:"Top-down overhead. Rise and rotate into a directly-overhead position looking straight down at the subject, flattening the scene into a graphic bird's-eye composition."},
+ {id:"arcR",n:"Arc right",c:"Orbit",view:"top",p:"Arc right. Sweep along a shallow curved path around the subject toward their right side, holding distance and height constant while the angle and background shift."},
+ {id:"arcL",n:"Arc left",c:"Orbit",view:"top",p:"Arc left. Sweep along a shallow curved path around the subject toward their left side, holding distance and height constant while the angle and background shift."},
+ {id:"orbitCW",n:"Orbit clockwise",c:"Orbit",view:"top",p:"Clockwise orbit. Circle fully around the subject at a fixed radius and height, keeping them centered while the entire background rotates past behind them."},
+ {id:"orbitCCW",n:"Orbit counterclockwise",c:"Orbit",view:"top",p:"Counterclockwise orbit. Circle fully around the subject at a fixed radius and height, keeping them centered while the entire background rotates past behind them."},
+ {id:"handheld",n:"Handheld",c:"Human",view:"top",p:"Handheld shot. Operate from human shoulder height with organic sway, breathing drift and small reactive reframes, keeping the subject readable inside a live, imperfect frame."},
+ {id:"snorri",n:"Snorricam (body-mount)",c:"Human",view:"top",p:"Body-mounted Snorricam. Lock the camera rigidly to the subject's torso facing their face, so they stay pinned in frame while the world lurches and swings around them."},
+ {id:"pov",n:"First-person POV",c:"Human",view:"top",p:"First-person point of view. Move forward at eye height from the character's perspective at a natural walking rhythm with subtle head bob, arriving at the next point of action."},
+ {id:"pushThrough",n:"Push-through reveal",c:"Special",view:"top",p:"Push-through movement. Drive forward past a close foreground edge, opening or barrier and continue into the space beyond it, letting the foreground wipe the frame as a transition."},
+ {id:"earthOut",n:"Sky zoom out",c:"Special",view:"side",p:"Vertical zoom out. Pull straight up and away from the starting point at accelerating speed, expanding from human scale to rooftop to landscape scale with the origin held at center."},
+ {id:"dutch",n:"Dutch roll",c:"Special",view:"frame",p:"Dutch roll. Rotate the camera around the lens axis into a canted angle and back, tipping the horizon deliberately to destabilize the frame, then settle level."}
+];
+var CATS = ["All","Hold","Pan/Tilt","Lens","Dolly/Track","Crane/Aerial","Orbit","Human","Special"];
+var moveById = {};
+MOVES.forEach(function(m){ moveById[m.id] = m; });
+
+/* ==================== state ==================== */
+var S = { angle:24, dist:4, h:1.6, focal:35, dutch:0, lookAt:"group", aimH:1.4, panT:0, tiltT:0 };
+var LENSES = [18,24,35,50,85,135];
+var selMove = null, prevT = 0;
+var camKeys = [];
+var actors = [], selActor = null, actorSeq = 0;
+var ALPHA = "ABCDEF";
+var ANIMS = [
+  {id:"idle",  w:"standing"},
+  {id:"walk",  w:"walking"},
+  {id:"run",   w:"running"},
+  {id:"talk",  w:"gesturing mid-conversation"},
+  {id:"point", w:"pointing ahead"},
+  {id:"sit",   w:"seated"},
+  {id:"crouch",w:"crouched low"}
+];
+
+/* ==================== three: scene ==================== */
+var stage = document.getElementById("stage");
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+var monCanvas = document.getElementById("monCanvas");
+var mon = new THREE.WebGLRenderer({canvas:monCanvas, antialias:true, preserveDrawingBuffer:true});
+mon.setPixelRatio(Math.min(window.devicePixelRatio,2));
+mon.shadowMap.enabled = true;
+mon.shadowMap.type = THREE.PCFSoftShadowMap;
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0c0e);
+scene.fog = new THREE.Fog(0x0b0c0e, 16, 34);
+
+scene.add(new THREE.HemisphereLight(0x8fa0b8, 0x17110b, 0.85));
+var sun = new THREE.DirectionalLight(0xffe2c0, 1.15);
+sun.position.set(5,8,4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left=-8; sun.shadow.camera.right=8;
+sun.shadow.camera.top=8; sun.shadow.camera.bottom=-8;
+scene.add(sun);
+var rim = new THREE.DirectionalLight(0x25d0c4, 0.25);
+rim.position.set(-6,3,-4);
+scene.add(rim);
+
+var floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(40,40),
+  new THREE.MeshStandardMaterial({color:0x17181b, roughness:0.95}));
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
+var grid = new THREE.GridHelper(40, 40, 0x24262b, 0x1c1e22);
+grid.position.y = 0.002;
+scene.add(grid);
+
+/* ==================== greybox set pieces ==================== */
+var setMat = new THREE.MeshStandardMaterial({color:0x2a2d33, roughness:0.9});
+var pieces = [], pieceSeq = 0, selPiece = null;
+var PIECE_TYPES = [
+ {id:"wall", n:"Wall"}, {id:"doorway", n:"Doorway"}, {id:"window", n:"Window wall"},
+ {id:"box", n:"Crate"}, {id:"column", n:"Column"}, {id:"table", n:"Table"},
+ {id:"counter", n:"Counter"}, {id:"stairs", n:"Stairs"}, {id:"car", n:"Car block"},
+ {id:"tree", n:"Tree"}
+];
+function pieceBox(w,h,d,x,y,z){
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), setMat);
+  m.position.set(x||0, y!==undefined ? y : h/2, z||0);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function buildPieceGeo(type){
+  var g = new THREE.Group();
+  var c;
+  switch(type){
+    case "doorway":
+      g.add(pieceBox(0.22,2.3,0.22,-0.65,1.15,0));
+      g.add(pieceBox(0.22,2.3,0.22, 0.65,1.15,0));
+      g.add(pieceBox(1.55,0.22,0.22, 0,2.36,0));
+      break;
+    case "window":
+      g.add(pieceBox(3,0.9,0.22, 0,0.45,0));
+      g.add(pieceBox(3,0.7,0.22, 0,2.45,0));
+      g.add(pieceBox(0.8,1.1,0.22,-1.1,1.45,0));
+      g.add(pieceBox(0.8,1.1,0.22, 1.1,1.45,0));
+      break;
+    case "box": g.add(pieceBox(0.8,0.8,0.8)); break;
+    case "column":
+      c = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.26,3.2,12), setMat);
+      c.position.y = 1.6; c.castShadow = true; c.receiveShadow = true; g.add(c);
+      break;
+    case "table":
+      g.add(pieceBox(1.3,0.06,0.8, 0,0.75,0));
+      [[-0.58,-0.32],[0.58,-0.32],[-0.58,0.32],[0.58,0.32]].forEach(function(p){
+        g.add(pieceBox(0.06,0.72,0.06, p[0],0.36,p[1]));
+      });
+      break;
+    case "counter": g.add(pieceBox(1.8,1.0,0.6)); break;
+    case "stairs":
+      for(var s=0;s<5;s++) g.add(pieceBox(1.1,0.18,0.32, 0, 0.09+s*0.18, -s*0.32));
+      break;
+    case "car":
+      g.add(pieceBox(1.85,0.6,4.4, 0,0.45,0));
+      g.add(pieceBox(1.7,0.5,2.1, 0,1.0,-0.2));
+      break;
+    case "tree":
+      c = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.14,1.6,8), setMat);
+      c.position.y = 0.8; c.castShadow = true; g.add(c);
+      c = new THREE.Mesh(new THREE.ConeGeometry(0.95,2.4,8), setMat);
+      c.position.y = 2.5; c.castShadow = true; g.add(c);
+      break;
+    default: g.add(pieceBox(3,2.8,0.25));
+  }
+  return g;
+}
+function addPiece(d){
+  d = d || {};
+  var group = new THREE.Group();
+  group.add(buildPieceGeo(d.type || "wall"));
+  var tape = tapeMark(0x25d0c4);
+  tape.scale.setScalar(2);
+  tape.visible = false;
+  group.add(tape);
+  var p = {
+    id: "p"+(pieceSeq++), type: d.type || "wall",
+    x: d.x||0, z: d.z||0, rot: d.rot||0, scale: d.scale||1,
+    group: group, tape: tape
+  };
+  group.position.set(p.x, 0, p.z);
+  group.rotation.y = M.degToRad(p.rot);
+  group.children[0].scale.setScalar(p.scale);
+  scene.add(group);
+  pieces.push(p);
+  selPiece = p.id;
+  return p;
+}
+function removePieceById(id){
+  var i = pieces.findIndex(function(p){return p.id===id;});
+  if(i<0) return;
+  scene.remove(pieces[i].group);
+  pieces.splice(i,1);
+  if(selPiece===id) selPiece = pieces.length ? pieces[pieces.length-1].id : null;
+}
+function getPiece(id){ return pieces.find(function(p){return p.id===id;}); }
+function selectedPiece(){ return getPiece(selPiece); }
+var SETPRESETS = [
+ {n:"Empty stage", pieces:[]},
+ {n:"Corner", pieces:[
+   {type:"wall", x:0.5, z:-4, rot:0, scale:1.4},
+   {type:"doorway", x:-2.6, z:-1.6, rot:29},
+   {type:"box", x:1.9, z:-0.9, rot:23}]},
+ {n:"Hallway", pieces:[
+   {type:"wall", x:-1.6, z:-1, rot:90, scale:1.7},
+   {type:"wall", x:1.6, z:-1, rot:90, scale:1.7},
+   {type:"doorway", x:0, z:-4.6, rot:0}]},
+ {n:"Alley", pieces:[
+   {type:"wall", x:-1.5, z:-0.5, rot:90, scale:2},
+   {type:"wall", x:1.5, z:-0.5, rot:90, scale:2},
+   {type:"counter", x:0.8, z:-2.4, rot:90},
+   {type:"box", x:-0.9, z:-1.8, rot:14},
+   {type:"box", x:-0.9, z:-1.1, rot:-8, scale:0.8}]},
+ {n:"Warehouse", pieces:[
+   {type:"wall", x:0, z:-5.5, rot:0, scale:2.2},
+   {type:"column", x:-2.4, z:-1.5}, {type:"column", x:2.4, z:-1.5},
+   {type:"column", x:-2.4, z:1.8}, {type:"column", x:2.4, z:1.8},
+   {type:"box", x:1.6, z:-2.6, rot:12}, {type:"box", x:2.3, z:-2.4, rot:-20},
+   {type:"box", x:1.9, z:-1.9, rot:40, scale:0.85}]},
+ {n:"Cafe", pieces:[
+   {type:"wall", x:0, z:-3.6, rot:0, scale:1.6},
+   {type:"window", x:-3.2, z:-1.4, rot:90},
+   {type:"counter", x:1.8, z:-2.6, rot:-14},
+   {type:"table", x:-1.3, z:-0.6, rot:12},
+   {type:"table", x:0.6, z:0.9, rot:-25}]},
+ {n:"Street", pieces:[
+   {type:"wall", x:-0.5, z:-4.4, rot:0, scale:2.2},
+   {type:"doorway", x:-2.2, z:-4.25, rot:0},
+   {type:"car", x:2.6, z:0.6, rot:8},
+   {type:"tree", x:-3.4, z:-1.6}, {type:"tree", x:3.8, z:-2.8, scale:1.2}]},
+ {n:"Forest", pieces:[
+   {type:"tree", x:-2.8, z:-2.2, scale:1.3}, {type:"tree", x:2.2, z:-3.1},
+   {type:"tree", x:-1.1, z:-4.2, scale:1.5}, {type:"tree", x:3.6, z:-0.8, scale:0.9},
+   {type:"tree", x:-4.2, z:0.6, scale:1.1}, {type:"tree", x:1.4, z:1.9, scale:0.8}]}
+];
+function applySetPreset(sp){
+  while(pieces.length) removePieceById(pieces[0].id);
+  sp.pieces.forEach(function(d){ addPiece(d); });
+  selPiece = pieces.length ? pieces[0].id : null;
+}
+
+/* ==================== 360 dome environment ==================== */
+var DOME = {tex:null, builtin:null, rot:0, h:1.6, R:30, bright:1, ground:true, showSet:true};
+var domeMesh = null, groundDisc = null, shadowDisc = null;
+function clearDomeMeshes(){
+  [domeMesh, groundDisc, shadowDisc].forEach(function(m){
+    if(m){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  });
+  domeMesh = groundDisc = shadowDisc = null;
+}
+function buildProjectedDisc(R, h, rot){
+  var NR = 44, NS = 96;
+  var cr = Math.cos(-rot), sr = Math.sin(-rot);
+  function uvFor(x, z){
+    var dy = -h;
+    var rx = x*cr + z*sr;
+    var rz = -x*sr + z*cr;
+    var len = Math.sqrt(rx*rx + dy*dy + rz*rz) || 1;
+    var ux = rx/len, uy = dy/len, uz = rz/len;
+    var u = Math.atan2(uz, ux)/(Math.PI*2); if(u < 0) u += 1;
+    var v = 1 - Math.acos(Math.max(-1, Math.min(1, uy)))/Math.PI;
+    return [u, v];
+  }
+  var tris = [];
+  for(var i=0;i<NR;i++){
+    var rA = R*i/NR, rB = R*(i+1)/NR;
+    for(var j=0;j<NS;j++){
+      var a0 = j/NS*Math.PI*2, a1 = (j+1)/NS*Math.PI*2;
+      var A0=[rA*Math.cos(a0), rA*Math.sin(a0)], A1=[rA*Math.cos(a1), rA*Math.sin(a1)];
+      var B0=[rB*Math.cos(a0), rB*Math.sin(a0)], B1=[rB*Math.cos(a1), rB*Math.sin(a1)];
+      tris.push([A0,B0,B1]);
+      if(i>0) tris.push([A0,B1,A1]);
+    }
+  }
+  var pos = new Float32Array(tris.length*9), uvA = new Float32Array(tris.length*6);
+  tris.forEach(function(tri, ti){
+    var us = tri.map(function(p){ return uvFor(p[0], p[1]); });
+    var u0 = us[0][0];
+    tri.forEach(function(p, vi){
+      pos[ti*9+vi*3]   = p[0];
+      pos[ti*9+vi*3+1] = 0;
+      pos[ti*9+vi*3+2] = p[1];
+      var u = us[vi][0];
+      if(u - u0 > 0.5) u -= 1;
+      if(u - u0 < -0.5) u += 1;
+      uvA[ti*6+vi*2] = u;
+      uvA[ti*6+vi*2+1] = us[vi][1];
+    });
+  });
+  var g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.BufferAttribute(uvA, 2));
+  return g;
+}
+function buildDome(){
+  clearDomeMeshes();
+  if(!DOME.tex){ floor.visible = true; return; }
+  var rotR = M.degToRad(DOME.rot);
+  var sg = new THREE.SphereGeometry(DOME.R, 72, 36);
+  sg.scale(-1, 1, 1);
+  var dm = new THREE.MeshBasicMaterial({map:DOME.tex});
+  dm.fog = false;
+  dm.color.setScalar(DOME.bright);
+  domeMesh = new THREE.Mesh(sg, dm);
+  domeMesh.position.y = DOME.h;
+  domeMesh.rotation.y = rotR;
+  scene.add(domeMesh);
+  if(DOME.ground){
+    var gm = new THREE.MeshBasicMaterial({map:DOME.tex, side:THREE.DoubleSide});
+    gm.fog = false;
+    gm.color.setScalar(DOME.bright);
+    groundDisc = new THREE.Mesh(buildProjectedDisc(DOME.R*0.995, DOME.h, rotR), gm);
+    scene.add(groundDisc);
+    shadowDisc = new THREE.Mesh(new THREE.CircleGeometry(Math.min(DOME.R, 18), 48),
+      new THREE.ShadowMaterial({opacity:0.35}));
+    shadowDisc.rotation.x = -Math.PI/2;
+    shadowDisc.position.y = 0.0015;
+    shadowDisc.receiveShadow = true;
+    scene.add(shadowDisc);
+    floor.visible = false;
+  } else {
+    floor.visible = true;
+  }
+}
+function applySetVisibility(){
+  pieces.forEach(function(p){ p.group.visible = DOME.showSet; });
+}
+var d360Input = document.getElementById("d360Input");
+document.getElementById("load360").addEventListener("click", function(){ d360Input.click(); });
+d360Input.addEventListener("change", function(){
+  var f = d360Input.files && d360Input.files[0];
+  d360Input.value = "";
+  if(!f) return;
+  var fr = new FileReader();
+  fr.onload = function(){
+    new THREE.TextureLoader().load(fr.result, function(tx){
+      tx.wrapS = THREE.RepeatWrapping;
+      tx.minFilter = THREE.LinearFilter;
+      if(DOME.tex) DOME.tex.dispose();
+      DOME.tex = tx;
+      DOME.builtin = null;
+      buildDome();
+      buildPrompt();
+      showToast("360 DOME UP");
+    }, undefined, function(){ showToast("COULD NOT READ IMAGE"); });
+  };
+  fr.onerror = function(){ showToast("COULD NOT READ IMAGE"); };
+  fr.readAsDataURL(f);
+});
+document.getElementById("clear360").addEventListener("click", function(){
+  if(DOME.tex){ DOME.tex.dispose(); DOME.tex = null; }
+  DOME.builtin = null;
+  buildDome(); buildPrompt();
+});
+var setDRot = bindRange("dRot","oDRot",function(v){return v+"\u00B0";},function(v){DOME.rot=v; buildDome();});
+var setDHor = bindRange("dHor","oDHor",function(v){return v.toFixed(2)+"m";},function(v){DOME.h=v; buildDome();});
+var setDSize = bindRange("dSize","oDSize",function(v){return v+"m";},function(v){DOME.R=v; buildDome();});
+var setDBright = bindRange("dBright","oDBright",function(v){return v.toFixed(2);},function(v){DOME.bright=v; buildDome();});
+document.getElementById("dGround").addEventListener("change", function(e){ DOME.ground = e.target.checked; buildDome(); });
+document.getElementById("dShowSet").addEventListener("change", function(e){ DOME.showSet = e.target.checked; applySetVisibility(); });
+function syncDomeUI(){
+  setDRot(DOME.rot); setDHor(DOME.h); setDSize(DOME.R); setDBright(DOME.bright);
+  document.getElementById("dGround").checked = DOME.ground;
+  document.getElementById("dShowSet").checked = DOME.showSet;
+}
+function makePanoCanvas(kind){
+  var W = 2048, H = 1024, HZ = H/2;
+  var cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext("2d");
+  function grad(y0, y1, stops){
+    var g = ctx.createLinearGradient(0, y0, 0, y1);
+    stops.forEach(function(s){ g.addColorStop(s[0], s[1]); });
+    return g;
+  }
+  function fillSky(stops){ ctx.fillStyle = grad(0, HZ, stops); ctx.fillRect(0,0,W,HZ); }
+  function fillGround(stops){ ctx.fillStyle = grad(HZ, H, stops); ctx.fillRect(0,HZ,W,H-HZ); }
+  function sun(u, v, r, inner, outer){
+    var x = u*W, y = v*H;
+    var g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0, inner); g.addColorStop(1, outer);
+    ctx.fillStyle = g; ctx.fillRect(x-r, y-r, r*2, r*2);
+  }
+  function hazeBand(color, hh){
+    ctx.fillStyle = grad(HZ-hh, HZ+hh, [[0,"rgba(0,0,0,0)"],[0.5,color],[1,"rgba(0,0,0,0)"]]);
+    ctx.fillRect(0, HZ-hh, W, hh*2);
+  }
+  function skyline(maxH, color){
+    var NB = 64, bw = W/NB;
+    ctx.fillStyle = color;
+    for(var i=0;i<NB;i++){
+      var t = i/NB*Math.PI*2;
+      var h = maxH*(0.35 + 0.22*Math.sin(3*t+1) + 0.18*Math.sin(7*t+4) + 0.25*Math.abs(Math.sin(11*t)));
+      ctx.fillRect(i*bw, HZ-h, bw+1, h);
+    }
+  }
+  function stars(n){
+    for(var i=0;i<n;i++){
+      var x = Math.random()*W, y = Math.random()*H*0.42;
+      ctx.fillStyle = "rgba(255,255,255," + (0.25+Math.random()*0.7).toFixed(2) + ")";
+      var s2 = Math.random() < 0.15 ? 2 : 1;
+      ctx.fillRect(x, y, s2, s2);
+    }
+  }
+  switch(kind){
+    case "sunset":
+      fillSky([[0,"#241f3d"],[0.55,"#7a3d52"],[0.85,"#d3714f"],[1,"#f5b168"]]);
+      fillGround([[0,"#4a3a35"],[1,"#221c1b"]]);
+      sun(0.68, 0.465, 150, "rgba(255,214,150,0.95)", "rgba(255,160,90,0)");
+      hazeBand("rgba(245,177,104,0.5)", 26);
+      break;
+    case "night":
+      fillSky([[0,"#04060d"],[0.8,"#0b1322"],[1,"#182338"]]);
+      fillGround([[0,"#11151d"],[1,"#05070b"]]);
+      stars(420);
+      hazeBand("rgba(255,166,87,0.28)", 30);
+      skyline(80, "#05070c");
+      sun(0.32, 0.2, 26, "rgba(235,240,255,0.9)", "rgba(235,240,255,0)");
+      break;
+    case "overcast":
+      fillSky([[0,"#8d949c"],[1,"#cfd4d9"]]);
+      fillGround([[0,"#767a7e"],[1,"#54575a"]]);
+      hazeBand("rgba(214,219,224,0.6)", 40);
+      break;
+    case "cyc":
+      ctx.fillStyle = grad(0, H, [[0,"#5f6367"],[0.5,"#b8bbc0"],[1,"#575a5e"]]);
+      ctx.fillRect(0,0,W,H);
+      break;
+    case "desert":
+      fillSky([[0,"#2f6ab1"],[0.8,"#a9cfe8"],[1,"#e8f1f6"]]);
+      fillGround([[0,"#c8a267"],[1,"#8a6f45"]]);
+      sun(0.72, 0.26, 90, "rgba(255,251,230,0.95)", "rgba(255,251,230,0)");
+      hazeBand("rgba(238,222,190,0.5)", 22);
+      break;
+    default:
+      fillSky([[0,"#1d4d97"],[0.7,"#7fb2e4"],[1,"#dcebf6"]]);
+      fillGround([[0,"#83886f"],[1,"#565b4d"]]);
+      sun(0.72, 0.3, 100, "rgba(255,252,235,0.95)", "rgba(255,252,235,0)");
+      hazeBand("rgba(230,240,248,0.55)", 30);
+  }
+  return cv;
+}
+var PANO_KINDS = [
+ {id:"day", n:"Clear day"}, {id:"sunset", n:"Sunset"}, {id:"night", n:"Night city"},
+ {id:"overcast", n:"Overcast"}, {id:"cyc", n:"Studio cyc"}, {id:"desert", n:"Desert"}
+];
+function applyBuiltinPano(kind){
+  var tx = new THREE.CanvasTexture(makePanoCanvas(kind));
+  tx.wrapS = THREE.RepeatWrapping;
+  tx.minFilter = THREE.LinearFilter;
+  if(DOME.tex) DOME.tex.dispose();
+  DOME.tex = tx;
+  DOME.builtin = kind;
+  buildDome(); buildPrompt();
+}
+var panoRow = document.getElementById("panoRow");
+PANO_KINDS.forEach(function(pk){
+  var b = document.createElement("button");
+  b.className = "preset"; b.textContent = pk.n;
+  b.addEventListener("click", function(){
+    applyBuiltinPano(pk.id);
+    showToast(pk.n.toUpperCase() + " DOME UP");
+  });
+  panoRow.appendChild(b);
+});
+
+/* ==================== actors ==================== */
+function tapeMark(color){
+  var g = new THREE.Group();
+  var m = new THREE.MeshBasicMaterial({color:color});
+  var a = new THREE.Mesh(new THREE.PlaneGeometry(0.34,0.05), m);
+  var b = new THREE.Mesh(new THREE.PlaneGeometry(0.05,0.24), m);
+  b.position.z = 0.14;
+  g.add(a); g.add(b);
+  g.rotation.x = -Math.PI/2;
+  g.position.y = 0.004;
+  g.userData.mat = m;
+  return g;
+}
+var MANN_STYLES = [
+ {id:"botLight", n:"Bot \u00B7 light"},
+ {id:"botSlim",  n:"Bot \u00B7 slim"},
+ {id:"kid",      n:"Bot \u00B7 kid"},
+ {id:"wood",     n:"Wood mannequin"},
+ {id:"block",    n:"Greybox block"},
+ {id:"sil",      n:"Silhouette"}
+];
+var MSTYLE = {
+ botLight:{panel:0xcfd3d9, joint:0x363b42, w:1,    r:1,    box:false, scale:1,    egg:false},
+ botSlim: {panel:0x596170, joint:0xd6d9de, w:0.86, r:0.82, box:false, scale:0.98, egg:false},
+ kid:     {panel:0xcfd3d9, joint:0x363b42, w:0.9,  r:0.9,  box:false, scale:0.72, egg:false},
+ wood:    {panel:0xb98e5a, joint:0x86663f, w:1,    r:0.95, box:false, scale:1,    egg:true},
+ block:   {panel:0x8f959d, joint:0x6a7076, w:1,    r:1,    box:true,  scale:1,    egg:false},
+ sil:     {panel:0x101114, joint:0x101114, w:1,    r:1,    box:false, scale:1,    egg:false}
+};
+function makeMannequin(styleId){
+  var st = MSTYLE[styleId] || MSTYLE.botLight;
+  var mann = new THREE.Group();
+  var panel = new THREE.MeshStandardMaterial({color:st.panel, roughness:st.box?0.85:0.45, metalness:st.box?0:0.15});
+  var dark  = new THREE.MeshStandardMaterial({color:st.joint, roughness:0.6, metalness:st.box?0:0.25});
+  function seg(r1,r2,len,mat){
+    var g = st.box ? new THREE.BoxGeometry((r1+r2)*st.r, len, (r1+r2)*st.r)
+                   : new THREE.CylinderGeometry(r1*st.r, r2*st.r, len, 12);
+    var m = new THREE.Mesh(g, mat);
+    m.position.y = -len/2; m.castShadow = true; return m;
+  }
+  function ball(r,mat,x,y,z){
+    var g = st.box ? new THREE.BoxGeometry(r*1.7, r*1.7, r*1.7)
+                   : new THREE.SphereGeometry(r*st.r, 12, 10);
+    var m = new THREE.Mesh(g, mat);
+    m.position.set(x||0,y||0,z||0); m.castShadow = true; return m;
+  }
+  var hips = new THREE.Group(); hips.position.y = 0.95; mann.add(hips);
+
+  var pelvis = ball(0.16, dark, 0, 0.02); pelvis.scale.set(1.05*st.w,0.72,0.8); hips.add(pelvis);
+  var abdomen = new THREE.Mesh(
+    st.box ? new THREE.BoxGeometry(0.24*st.w,0.16,0.2) : new THREE.CylinderGeometry(0.115*st.r,0.135*st.r,0.16,12), panel);
+  abdomen.position.y = 0.15; abdomen.castShadow = true; hips.add(abdomen);
+  var chest = ball(0.18, panel, 0, 0.34); chest.scale.set(1.15*st.w,1.25,0.75); hips.add(chest);
+  hips.add(ball(0.09, dark, -0.22*st.w, 0.44));
+  hips.add(ball(0.09, dark,  0.22*st.w, 0.44));
+
+  var headPiv = new THREE.Group(); headPiv.position.y = 0.58; hips.add(headPiv);
+  var neck = new THREE.Mesh(
+    st.box ? new THREE.BoxGeometry(0.1,0.09,0.1) : new THREE.CylinderGeometry(0.05,0.06,0.09,10), dark);
+  neck.position.y = 0.03; neck.castShadow = true; headPiv.add(neck);
+  var skull = ball(0.115, panel, 0, 0.155);
+  skull.scale.set(st.egg?0.88:0.92, st.egg?1.3:1.12, 0.98);
+  headPiv.add(skull);
+
+  function makeLeg(side){
+    var leg = new THREE.Group(); leg.position.set(0.105*st.w*side, 0, 0);
+    leg.add(ball(0.075, dark));
+    leg.add(seg(0.07,0.055,0.44,panel));
+    var knee = new THREE.Group(); knee.position.y = -0.44; leg.add(knee);
+    knee.add(ball(0.06, dark));
+    knee.add(seg(0.055,0.042,0.44,panel));
+    var foot = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.055,0.23), dark);
+    foot.position.set(0,-0.465,0.05); foot.castShadow = true; knee.add(foot);
+    hips.add(leg);
+    return {leg:leg, knee:knee};
+  }
+  var L = makeLeg(-1), R = makeLeg(1);
+
+  function makeArm(side){
+    var arm = new THREE.Group(); arm.position.set(0.24*st.w*side, 0.44, 0);
+    arm.add(seg(0.055,0.045,0.30,panel));
+    var elb = new THREE.Group(); elb.position.y = -0.30; arm.add(elb);
+    elb.add(ball(0.05, dark));
+    elb.add(seg(0.045,0.036,0.27,panel));
+    elb.add(ball(0.05, panel, 0, -0.30));
+    hips.add(arm);
+    return {arm:arm, elb:elb};
+  }
+  var AL = makeArm(-1), AR = makeArm(1);
+  AL.arm.rotation.z = 0.08; AR.arm.rotation.z = -0.08;
+
+  mann.scale.setScalar(st.scale);
+  return {mann:mann, hips:hips,
+    legL:L.leg, legR:R.leg, kneeL:L.knee, kneeR:R.knee,
+    armL:AL.arm, armR:AR.arm, elbL:AL.elb, elbR:AR.elb,
+    head:headPiv};
+}
+function addActor(d){
+  d = d || {};
+  if(actors.length >= 6){ showToast("SIX ACTOR MAX"); return null; }
+  var group = new THREE.Group();
+  var parts = makeMannequin(d.mstyle || "botLight");
+  group.add(parts.mann);
+  var tape = tapeMark(0xff6a13);
+  group.add(tape);
+  var a = {
+    id: "a"+(actorSeq++),
+    x: d.x||0, z: d.z||0, face: d.face||0,
+    anim: d.anim||"idle",
+    mstyle: d.mstyle || "botLight",
+    group: group, parts: parts, tape: tape,
+    phase: actors.length*1.37,
+    custom: null
+  };
+  group.position.set(a.x, 0, a.z);
+  group.rotation.y = M.degToRad(a.face);
+  scene.add(group);
+  actors.push(a);
+  selActor = a.id;
+  return a;
+}
+function removeActorById(id, silent){
+  var i = actors.findIndex(function(a){return a.id===id;});
+  if(i<0) return;
+  if(actors.length<=1 && !silent){ showToast("KEEP AT LEAST ONE ACTOR"); return; }
+  scene.remove(actors[i].group);
+  actors.splice(i,1);
+  actors.forEach(function(a,k){ a.phase = k*1.37; });
+  if(selActor===id) selActor = actors.length ? actors[actors.length-1].id : null;
+  if(S.lookAt.split(":")[0]===id) S.lookAt = "group";
+}
+function actorName(a){
+  var i = actors.indexOf(a);
+  return ALPHA[i] || ("X"+i);
+}
+function getActor(id){ return actors.find(function(a){return a.id===id;}); }
+function selectedActor(){ return getActor(selActor); }
+
+/* procedural mannequin animation, stateless per frame */
+function poseMannequin(a, t){
+  var P = a.parts; if(!P) return;
+  var ph = a.phase;
+  P.hips.position.y = 0.95;
+  P.hips.rotation.set(0,0,0);
+  P.legL.rotation.set(0,0,0); P.legR.rotation.set(0,0,0);
+  P.kneeL.rotation.set(0,0,0); P.kneeR.rotation.set(0,0,0);
+  P.armL.rotation.set(0,0,0.08); P.armR.rotation.set(0,0,-0.08);
+  P.elbL.rotation.set(-0.25,0,0); P.elbR.rotation.set(-0.25,0,0);
+  P.head.rotation.set(0,0,0);
+  var s;
+  switch(a.anim){
+    case "walk":
+      s = Math.sin(t*4+ph);
+      P.legL.rotation.x = -s*0.5; P.legR.rotation.x = s*0.5;
+      P.kneeL.rotation.x = Math.max(0, Math.sin(t*4+ph-1.1))*0.85;
+      P.kneeR.rotation.x = Math.max(0, Math.sin(t*4+ph+Math.PI-1.1))*0.85;
+      P.armL.rotation.x = s*0.42; P.armR.rotation.x = -s*0.42;
+      P.elbL.rotation.x = -0.3 - Math.max(0,s)*0.3;
+      P.elbR.rotation.x = -0.3 - Math.max(0,-s)*0.3;
+      P.hips.position.y = 0.95 + Math.abs(Math.cos(t*4+ph))*0.03;
+      break;
+    case "run":
+      s = Math.sin(t*7.5+ph);
+      P.legL.rotation.x = -s*0.85; P.legR.rotation.x = s*0.85;
+      P.kneeL.rotation.x = Math.max(0, Math.sin(t*7.5+ph-1.0))*1.35;
+      P.kneeR.rotation.x = Math.max(0, Math.sin(t*7.5+ph+Math.PI-1.0))*1.35;
+      P.armL.rotation.x = s*0.8; P.armR.rotation.x = -s*0.8;
+      P.elbL.rotation.x = -1.15; P.elbR.rotation.x = -1.15;
+      P.hips.rotation.x = 0.2;
+      P.hips.position.y = 0.97 + Math.abs(Math.cos(t*7.5+ph))*0.06;
+      break;
+    case "talk":
+      P.armR.rotation.x = -0.55 + Math.sin(t*3.2+ph)*0.2;
+      P.armR.rotation.z = -0.3;
+      P.elbR.rotation.x = -0.9 + Math.sin(t*2.4+ph)*0.25;
+      P.head.rotation.x = Math.sin(t*2.6+ph)*0.06;
+      P.hips.rotation.y = Math.sin(t*0.9+ph)*0.05;
+      break;
+    case "point":
+      P.armR.rotation.x = -1.3;
+      P.elbR.rotation.x = -0.1;
+      P.hips.rotation.y = Math.sin(t*0.8+ph)*0.03;
+      break;
+    case "sit":
+      P.hips.position.y = 0.55;
+      P.legL.rotation.x = -1.5; P.legR.rotation.x = -1.5;
+      P.kneeL.rotation.x = 1.45; P.kneeR.rotation.x = 1.45;
+      P.armL.rotation.x = -0.45; P.armR.rotation.x = -0.45;
+      P.elbL.rotation.x = -0.5; P.elbR.rotation.x = -0.5;
+      break;
+    case "crouch":
+      P.hips.position.y = 0.5;
+      P.hips.rotation.x = 0.4;
+      P.legL.rotation.x = -1.05; P.legR.rotation.x = -1.05;
+      P.kneeL.rotation.x = 1.55; P.kneeR.rotation.x = 1.55;
+      P.armL.rotation.x = -0.5; P.armR.rotation.x = -0.5;
+      P.elbL.rotation.x = -0.7; P.elbR.rotation.x = -0.7;
+      break;
+    default: /* idle */
+      P.hips.rotation.z = Math.sin(t*1.1+ph)*0.02;
+      P.armL.rotation.x = Math.sin(t*1.3+ph)*0.04;
+      P.armR.rotation.x = Math.sin(t*1.3+ph+1)*0.04;
+      P.head.rotation.y = Math.sin(t*0.5+ph)*0.08;
+  }
+}
+
+/* ==================== blocking presets ==================== */
+var PRESETS = [
+ {n:"Single mark", look:"group", actors:[{x:0,z:0,face:170,anim:"idle"}],
+  cam:{angle:24,dist:4,h:1.6,focal:35}},
+ {n:"Two-shot", look:"group", actors:[{x:-0.6,z:0,face:90,anim:"talk"},{x:0.6,z:0,face:-90,anim:"idle"}],
+  cam:{angle:0,dist:3.2,h:1.5,focal:50,aimH:1.5}},
+ {n:"Over-the-shoulder", look:{i:1,face:true}, actors:[{x:-0.55,z:0,face:90,anim:"idle"},{x:0.55,z:0,face:-90,anim:"talk"}],
+  cam:{angle:-96,dist:1.9,h:1.65,focal:85}},
+ {n:"Walk & talk", look:"group", actors:[{x:-0.45,z:0.2,face:0,anim:"walk"},{x:0.45,z:-0.1,face:0,anim:"walk"}],
+  cam:{angle:4,dist:3.4,h:1.5,focal:35,aimH:1.5}, move:"revTrack"},
+ {n:"Interview", look:"group", actors:[{x:-0.8,z:0,face:70,anim:"sit"},{x:0.8,z:0,face:-70,anim:"talk"}],
+  cam:{angle:-30,dist:2.7,h:1.25,focal:50,aimH:1.3}},
+ {n:"Standoff", look:0, actors:[{x:0,z:-1.2,face:0,anim:"idle"},{x:-1.1,z:0.9,face:-150,anim:"idle"},{x:1.1,z:0.9,face:150,anim:"idle"}],
+  cam:{angle:178,dist:4.6,h:1.15,focal:24}, move:"arcR"},
+ {n:"Group scene", look:"group", actors:[
+   {x:-1.7,z:0.4,face:110,anim:"idle"},{x:-0.8,z:-0.5,face:60,anim:"talk"},
+   {x:0.2,z:-0.8,face:0,anim:"idle"},{x:1.1,z:-0.4,face:-60,anim:"idle"},
+   {x:1.8,z:0.5,face:-115,anim:"idle"}],
+  cam:{angle:10,dist:5.6,h:1.7,focal:24}},
+ {n:"Chase", look:0, actors:[{x:0,z:0.6,face:0,anim:"run"},{x:0.3,z:-1.5,face:0,anim:"run"}],
+  cam:{angle:90,dist:3.6,h:1.2,focal:35}, move:"track"}
+];
+function applyBlocking(p){
+  while(actors.length) removeActorById(actors[0].id, true);
+  p.actors.forEach(function(d){ addActor(d); });
+  if(p.cam){
+    setAngle(p.cam.angle); setDist(p.cam.dist); setHeight(p.cam.h); setDutch(p.cam.dutch||0);
+    setAimH(p.cam.aimH||1.4); setPanT(p.cam.panT||0); setTiltT(p.cam.tiltT||0);
+    if(p.cam.focal){ S.focal = p.cam.focal; syncLensUI(); }
+  }
+  if(typeof p.look === "number") S.lookAt = actors[p.look] ? actors[p.look].id : "group";
+  else if(p.look && typeof p.look === "object") S.lookAt = actors[p.look.i] ? (actors[p.look.i].id + (p.look.face ? ":face" : "")) : "group";
+  else S.lookAt = "group";
+  selMove = p.move || null; prevT = 0;
+  selActor = actors[0].id;
+  refreshLookSelect(); renderActorUI(); renderCards(); buildPrompt(); syncRec();
+  showToast(p.n.toUpperCase() + " SET");
+}
+
+/* ==================== virtual A cam ==================== */
+var camA = new THREE.PerspectiveCamera(38, 16/9, 0.15, 80);
+scene.add(camA);
+var rig = new THREE.Group();
+var bodyMat = new THREE.MeshStandardMaterial({color:0x0e0f11, roughness:0.5, metalness:0.3});
+var camBody = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.24,0.4), bodyMat);
+var lensM = new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.09,0.2,14), bodyMat);
+lensM.rotation.x = Math.PI/2; lensM.position.z = -0.28;
+var tally = new THREE.Mesh(new THREE.SphereGeometry(0.025,8,8),
+  new THREE.MeshBasicMaterial({color:0xff6a13}));
+tally.position.set(0,0.15,0.1);
+rig.add(camBody); rig.add(lensM); rig.add(tally);
+camA.add(rig);
+
+var proxy = new THREE.PerspectiveCamera(38, 16/9, 0.15, 3.2);
+var helper = new THREE.CameraHelper(proxy);
+scene.add(helper);
+
+/* ==================== director view: custom orbit + actor drag ==================== */
+var dirCam = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+var orb = {theta:-0.7, phi:1.15, r:11, cx:0, cy:1, cz:0};
+function updateDirCam(){
+  orb.phi = M.clamp(orb.phi, 0.15, 1.52);
+  orb.r = M.clamp(orb.r, 3, 30);
+  dirCam.position.set(
+    orb.cx + orb.r*Math.sin(orb.phi)*Math.sin(orb.theta),
+    orb.cy + orb.r*Math.cos(orb.phi),
+    orb.cz + orb.r*Math.sin(orb.phi)*Math.cos(orb.theta));
+  dirCam.lookAt(orb.cx, orb.cy, orb.cz);
+}
+updateDirCam();
+
+var el = renderer.domElement;
+var ptrs = {}, lastPinch = 0;
+var ray = new THREE.Raycaster();
+var groundPlane = new THREE.Plane(V3(0,1,0), 0);
+var dragActor = null, dragPiece = null;
+function ndc(e){
+  var r = el.getBoundingClientRect();
+  return new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+}
+function actorFromObject(o){
+  while(o){
+    var hit = actors.find(function(a){return a.group===o;});
+    if(hit) return hit;
+    o = o.parent;
+  }
+  return null;
+}
+function pieceFromObject(o){
+  while(o){
+    var hit = pieces.find(function(p){return p.group===o;});
+    if(hit) return hit;
+    o = o.parent;
+  }
+  return null;
+}
+el.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = {x:e.clientX,y:e.clientY};
+  el.setPointerCapture(e.pointerId);
+  if(Object.keys(ptrs).length===1){
+    ray.setFromCamera(ndc(e), dirCam);
+    var hits = ray.intersectObjects(actors.map(function(a){return a.group;}), true);
+    if(hits.length){
+      dragActor = actorFromObject(hits[0].object);
+      if(dragActor){ selActor = dragActor.id; renderActorUI(); }
+    } else if(pieces.length){
+      var ph = ray.intersectObjects(pieces.map(function(p){return p.group;}), true);
+      if(ph.length){
+        dragPiece = pieceFromObject(ph[0].object);
+        if(dragPiece){ selPiece = dragPiece.id; renderPieceUI(); }
+      }
+    }
+  }
+});
+el.addEventListener("pointermove", function(e){
+  if(!ptrs[e.pointerId]) return;
+  var ids = Object.keys(ptrs);
+  if(ids.length === 1){
+    if(dragActor){
+      ray.setFromCamera(ndc(e), dirCam);
+      var pt = V3(0,0,0);
+      if(ray.ray.intersectPlane(groundPlane, pt)){
+        dragActor.x = M.clamp(pt.x, -8, 8);
+        dragActor.z = M.clamp(pt.z, -8, 8);
+        dragActor.group.position.set(dragActor.x, 0, dragActor.z);
+      }
+      ptrs[e.pointerId].x = e.clientX; ptrs[e.pointerId].y = e.clientY;
+      return;
+    }
+    if(dragPiece){
+      ray.setFromCamera(ndc(e), dirCam);
+      var pt2 = V3(0,0,0);
+      if(ray.ray.intersectPlane(groundPlane, pt2)){
+        dragPiece.x = M.clamp(pt2.x, -10, 10);
+        dragPiece.z = M.clamp(pt2.z, -10, 10);
+        dragPiece.group.position.set(dragPiece.x, 0, dragPiece.z);
+      }
+      ptrs[e.pointerId].x = e.clientX; ptrs[e.pointerId].y = e.clientY;
+      return;
+    }
+    var p = ptrs[e.pointerId];
+    orb.theta -= (e.clientX - p.x)*0.0055;
+    orb.phi   -= (e.clientY - p.y)*0.0045;
+    p.x = e.clientX; p.y = e.clientY;
+    updateDirCam();
+  } else if(ids.length === 2){
+    ptrs[e.pointerId].x = e.clientX; ptrs[e.pointerId].y = e.clientY;
+    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    var d = Math.hypot(a.x-b.x, a.y-b.y);
+    if(lastPinch){ orb.r *= lastPinch/d; updateDirCam(); }
+    lastPinch = d;
+  }
+});
+function ptrUp(e){
+  delete ptrs[e.pointerId]; lastPinch = 0;
+  if(dragActor){ syncActorSliders(); buildPrompt(); }
+  if(dragPiece){ syncPieceSliders(); }
+  dragActor = null; dragPiece = null;
+}
+el.addEventListener("pointerup", ptrUp);
+el.addEventListener("pointercancel", ptrUp);
+el.addEventListener("wheel", function(e){
+  e.preventDefault();
+  orb.r *= (1 + Math.sign(e.deltaY)*0.08);
+  updateDirCam();
+}, {passive:false});
+
+/* ==================== pose math (pure, reused by monitor + thumbnails) ==================== */
+function focalToFov(f){ return 2*Math.atan(12/f)*180/Math.PI; }
+function basePose(){
+  return { theta: M.degToRad(S.angle), dist: S.dist, h: S.h, focal: S.focal,
+    roll: M.degToRad(S.dutch), panT: M.degToRad(S.panT), tiltT: M.degToRad(S.tiltT) };
+}
+var _hw = new THREE.Vector3();
+function headPos(a){
+  if(a.custom) return V3(a.x, 1.58, a.z);
+  a.parts.head.getWorldPosition(_hw);
+  return V3(_hw.x, _hw.y + 0.12, _hw.z);
+}
+function lookParts(){
+  var bits = S.lookAt.split(":");
+  return {a: getActor(bits[0]), face: bits[1] === "face"};
+}
+function getTarget(){
+  if(S.lookAt !== "group"){
+    var lp = lookParts();
+    if(lp.a) return lp.face ? headPos(lp.a) : V3(lp.a.x, S.aimH, lp.a.z);
+  }
+  if(!actors.length) return V3(0, S.aimH, 0);
+  var x=0,z=0;
+  actors.forEach(function(a){ x+=a.x; z+=a.z; });
+  return V3(x/actors.length, S.aimH, z/actors.length);
+}
+function povActorPos(){
+  var a = (S.lookAt!=="group" && lookParts().a) || actors[0];
+  return a ? V3(a.x, 0, a.z) : V3(0,0,0);
+}
+var ghost = new THREE.Object3D();
+var _m4 = new THREE.Matrix4(), _up = V3(0,1,0);
+function lookQuat(obj, from, to){
+  _m4.lookAt(from, to, _up);
+  obj.quaternion.setFromRotationMatrix(_m4);
+}
+function posAt(theta,dist,h,tg){
+  return V3(tg.x + dist*Math.sin(theta), h, tg.z + dist*Math.cos(theta));
+}
+function ease(t){ return t*t*(3-2*t); }
+function whipEase(t){ return 0.5 + 0.5*Math.tanh((t-0.5)*7)/Math.tanh(3.5); }
+
+/* Computes pose for move id at eased progress e into `ghost`; returns current focal. */
+function computePose(id, e, time, b, tg, pov){
+  var theta=b.theta, dist=b.dist, h=b.h, focal=b.focal, roll=b.roll;
+  var pan=0, tilt=0, lat=0, dy=0, aim=true, jitter=0;
+  var keyed = (id === "keyed");
+  if(keyed && camKeys.length >= 2){
+    var seg = e * (camKeys.length - 1);
+    var i0 = Math.min(Math.floor(seg), camKeys.length - 2);
+    var tt = seg - i0; tt = tt*tt*(3-2*tt);
+    var k0 = camKeys[i0], k1 = camKeys[i0+1];
+    theta = M.degToRad(lerpAngle(k0.angle, k1.angle, tt));
+    dist = M.lerp(k0.dist, k1.dist, tt);
+    h = M.lerp(k0.h, k1.h, tt);
+    focal = M.lerp(k0.focal, k1.focal, tt);
+    roll = M.degToRad(M.lerp(k0.dutch, k1.dutch, tt));
+    pan = M.degToRad(M.lerp(k0.panT, k1.panT, tt));
+    tilt = M.degToRad(M.lerp(k0.tiltT, k1.tiltT, tt));
+  }
+
+  if(!keyed) switch(id){
+    case null: case "static": case "timelapse": break;
+    case "panR":  pan = -M.degToRad(M.lerp(-16,16,e)); break;
+    case "panL":  pan =  M.degToRad(M.lerp(-16,16,e)); break;
+    case "whipR": pan = -M.degToRad(M.lerp(-40,40,whipEase(e))); break;
+    case "whipL": pan =  M.degToRad(M.lerp(-40,40,whipEase(e))); break;
+    case "tiltUp":   tilt = M.degToRad(M.lerp(-8,22,e)); break;
+    case "tiltDown": tilt = M.degToRad(M.lerp(8,-22,e)); break;
+    case "zoomIn":  focal = M.lerp(b.focal, b.focal*1.9, e); break;
+    case "zoomOut": focal = M.lerp(b.focal, Math.max(16,b.focal*0.55), e); break;
+    case "crashIn": focal = M.lerp(b.focal, b.focal*2.6, whipEase(e)); break;
+    case "vertigo": dist = M.lerp(b.dist, b.dist*0.5, e); focal = b.focal*(dist/b.dist); break;
+    case "dollyIn":  dist = M.lerp(b.dist, Math.max(0.9,b.dist*0.45), e); break;
+    case "dollyOut": dist = M.lerp(b.dist, b.dist*1.7, e); break;
+    case "truckR": aim=false; lat =  M.lerp(-1.4,1.4,e); break;
+    case "truckL": aim=false; lat = -M.lerp(-1.4,1.4,e); break;
+    case "track":     lat = M.lerp(-1.8,1.8,e); break;
+    case "revTrack":  dist = b.dist + Math.sin(e*Math.PI)*0.25; jitter=0.25; break;
+    case "sideTrack": aim=false; lat = M.lerp(-2.2,2.2,e); break;
+    case "lowTrack":  h = 0.35; lat = M.lerp(-1.8,1.8,e); break;
+    case "pedUp":   aim=false; dy =  M.lerp(0,1.8,e); break;
+    case "pedDown": aim=false; dy = -M.lerp(0,Math.min(1.3,b.h-0.25),e); break;
+    case "craneUp":   h = b.h + M.lerp(0,3.4,e); break;
+    case "craneDown": h = M.lerp(b.h+3.2, Math.max(0.6,b.h), e); break;
+    case "dronePush": dist = M.lerp(b.dist*1.8, Math.max(1.2,b.dist*0.7), e); h = M.lerp(b.h+2.6, b.h, e); break;
+    case "dronePull": dist = M.lerp(b.dist, b.dist*1.9, e); h = M.lerp(b.h, b.h+2.8, e); break;
+    case "overhead":  dist = M.lerp(b.dist, 0.45, e); h = M.lerp(b.h, 7.5, e); break;
+    case "arcR": theta = b.theta - M.degToRad(M.lerp(-28,28,e)); break;
+    case "arcL": theta = b.theta + M.degToRad(M.lerp(-28,28,e)); break;
+    case "orbitCW":  theta = b.theta - e*Math.PI*2; break;
+    case "orbitCCW": theta = b.theta + e*Math.PI*2; break;
+    case "handheld": jitter = 1; break;
+    case "snorri": dist = 1.15; h = 1.5; jitter = 0.6; break;
+    case "pov": break;
+    case "pushThrough": dist = M.lerp(b.dist, 0.35, ease(e)); break;
+    case "earthOut": h = b.h + 30*e*e; dist = M.lerp(b.dist, 1.2, e); break;
+    case "dutch": roll = M.degToRad(Math.sin(e*Math.PI)*24) + b.roll; break;
+  }
+
+  if(id === "pov"){
+    var ap = pov || V3(0,0,0);
+    var pos = V3(ap.x, 1.55, ap.z);
+    var bp = posAt(b.theta, b.dist, b.h, tg);
+    var away = V3(pos.x-bp.x, 0, pos.z-bp.z);
+    if(away.lengthSq() < 0.001) away.set(0,0,-1);
+    away.normalize();
+    var aimPt = pos.clone().addScaledVector(away, 6); aimPt.y = 1.4;
+    ghost.position.copy(pos);
+    lookQuat(ghost, pos, aimPt);
+    ghost.translateZ(-e*2.4);
+    ghost.rotateY(b.panT||0);
+    ghost.rotateX(b.tiltT||0);
+    if(!reduced) ghost.position.y += Math.sin(time*7)*0.03;
+  } else {
+    var pos2 = posAt(theta, dist, h, tg);
+    ghost.position.copy(pos2);
+    if(aim){ lookQuat(ghost, pos2, tg); }
+    else { var basePos = posAt(b.theta, b.dist, b.h, tg); lookQuat(ghost, basePos, tg); }
+    if(dy) ghost.position.y += dy;
+    if(lat) ghost.translateX(lat);
+    ghost.rotateY(pan + (keyed ? 0 : (b.panT||0)));
+    ghost.rotateX(tilt + (keyed ? 0 : (b.tiltT||0)));
+    if(jitter && !reduced){
+      ghost.rotateY(Math.sin(time*3.1)*0.012*jitter + Math.sin(time*7.7)*0.006*jitter);
+      ghost.rotateX(Math.sin(time*2.3+1)*0.010*jitter + Math.sin(time*9.1)*0.005*jitter);
+      ghost.position.y += Math.sin(time*5.3)*0.015*jitter;
+    }
+  }
+  ghost.rotateZ(roll);
+  return focal;
+}
+function applyPoseToCam(id, e, time){
+  var focal = computePose(id, e, time, basePose(), getTarget(), povActorPos());
+  camA.position.copy(ghost.position);
+  camA.quaternion.copy(ghost.quaternion);
+  camA.fov = focalToFov(focal);
+  camA.updateProjectionMatrix();
+  return focal;
+}
+
+/* ==================== prompt composer ==================== */
+function shotSize(dist,focal){
+  var fov = focalToFov(focal)*Math.PI/180;
+  var visH = 2*dist*Math.tan(fov/2);
+  if(visH <= 0.9) return "close-up";
+  if(visH <= 1.5) return "medium close-up";
+  if(visH <= 2.4) return "medium shot";
+  if(visH <= 4.2) return "full shot";
+  return "wide shot";
+}
+function angleWord(){
+  if(S.h < 1.05) return "a low angle";
+  if(S.h > 2.3) return "a high angle";
+  return "eye level";
+}
+function animWord(a){
+  if(a.custom){
+    return a.custom.clipName ? ("performing \"" + a.custom.clipName + "\"") : "in character";
+  }
+  var d = ANIMS.find(function(x){return x.id===a.anim;});
+  return d ? d.w : a.anim;
+}
+function lerpAngle(a0, a1, t){
+  var d = ((a1 - a0 + 540) % 360) - 180;
+  return a0 + d * t;
+}
+function keyedPromptText(){
+  if(camKeys.length < 2) return moveById["static"].p;
+  var k0 = camKeys[0], kn = camKeys[camKeys.length-1];
+  var c = [];
+  if(kn.dist < k0.dist - 0.3) c.push("pushing in from " + k0.dist.toFixed(1) + "m to " + kn.dist.toFixed(1) + "m");
+  else if(kn.dist > k0.dist + 0.3) c.push("pulling back from " + k0.dist.toFixed(1) + "m to " + kn.dist.toFixed(1) + "m");
+  var da = ((kn.angle - k0.angle + 540) % 360) - 180;
+  if(Math.abs(da) > 12) c.push("arcing " + (da > 0 ? "left" : "right") + " around the subject by " + Math.round(Math.abs(da)) + " degrees");
+  if(kn.h > k0.h + 0.25) c.push("rising from " + k0.h.toFixed(1) + "m to " + kn.h.toFixed(1) + "m");
+  else if(kn.h < k0.h - 0.25) c.push("descending from " + k0.h.toFixed(1) + "m to " + kn.h.toFixed(1) + "m");
+  if(Math.abs(kn.focal - k0.focal) > 6) c.push("zooming from " + Math.round(k0.focal) + "mm to " + Math.round(kn.focal) + "mm");
+  if(Math.abs(kn.dutch - k0.dutch) > 4) c.push("rolling the horizon " + Math.round(kn.dutch - k0.dutch) + " degrees");
+  if(!c.length) c.push("drifting subtly between framings");
+  return "Custom camera move: " + c.join(", ") + ", easing smoothly through " + camKeys.length +
+    " keyframes while holding the subject framed, ending settled.";
+}
+function composePrompt(includeMove){
+  var n = actors.length;
+  var who = n===1 ? "the subject" : (n===2 ? "two subjects" : n+" subjects");
+  var lines = [];
+  var l1 = S.focal + "mm lens, " + shotSize(S.dist,S.focal) + " of " + who + " from " + angleWord() +
+    ", camera " + S.dist.toFixed(1) + "m out at " + S.h.toFixed(1) + "m height";
+  if(S.lookAt !== "group"){
+    var lp = lookParts();
+    if(lp.a) l1 += ", framed on actor " + actorName(lp.a) + (lp.face ? "'s face" : "");
+  } else if(S.aimH >= 1.45){
+    l1 += ", framed at face level";
+  }
+  if(S.dutch) l1 += ", frame canted " + S.dutch + " degrees";
+  lines.push(l1 + ".");
+  var lookBits = [];
+  [lookItem(LENSKITS,LOOK.kit), lookItem(STOCKS,LOOK.stock),
+   lookItem(LIGHTS,LOOK.light), lookItem(LOOKSTYLES,LOOK.style),
+   lookItem(APERTURES,LOOK.ap)]
+    .forEach(function(x){ if(x.p) lookBits.push(x.p); });
+  if(LOOK.notes && LOOK.notes.trim()) lookBits.push(LOOK.notes.trim().replace(/\.+$/,""));
+  if(lookBits.length){
+    lines.push(lookBits.map(function(s){
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }).join(". ") + ".");
+  }
+  var acting = actors.filter(function(a){ return a.custom || a.anim!=="idle"; })
+    .map(function(a){ return "Actor " + actorName(a) + " " + animWord(a); });
+  if(acting.length) lines.push(acting.join(", ") + ".");
+  if(includeMove){
+    var mv = moveById[selMove];
+    if(mv) lines.push(mv.p);
+    else if(selMove === "keyed") lines.push(keyedPromptText());
+    else lines.push(moveById["static"].p);
+  }
+  lines.push(DOME.tex
+    ? "Match the attached reference frame for composition, subject positions, lighting and the surrounding location."
+    : "Match the attached reference frame for composition, subject positions and lighting.");
+  return lines.join("\n\n");
+}
+function buildPrompt(){
+  document.getElementById("promptBox").textContent = composePrompt(true);
+}
+
+/* ==================== UI: camera ==================== */
+function bindRange(id, out, fmt, onset){
+  var r = document.getElementById(id), o = document.getElementById(out);
+  r.addEventListener("input", function(){
+    onset(parseFloat(r.value));
+    o.textContent = fmt(parseFloat(r.value));
+    buildPrompt();
+  });
+  return function(v){ r.value = v; onset(v); o.textContent = fmt(v); };
+}
+var setAngle  = bindRange("rAngle","oAngle",function(v){return v+"\u00B0";},function(v){S.angle=v;});
+var setDist   = bindRange("rDist","oDist",function(v){return v.toFixed(1)+"m";},function(v){S.dist=v;});
+var setHeight = bindRange("rHeight","oHeight",function(v){return v.toFixed(1)+"m";},function(v){S.h=v;});
+var setDutch  = bindRange("rDutch","oDutch",function(v){return v+"\u00B0";},function(v){S.dutch=v;});
+var setAimH   = bindRange("rAimH","oAimH",function(v){return v.toFixed(2)+"m";},function(v){S.aimH=v;});
+var setPanT   = bindRange("rPanT","oPanT",function(v){return v+"\u00B0";},function(v){S.panT=v;});
+var setTiltT  = bindRange("rTiltT","oTiltT",function(v){return v+"\u00B0";},function(v){S.tiltT=v;});
+
+var lensSet = document.getElementById("lensSet");
+LENSES.forEach(function(f){
+  var b = document.createElement("button");
+  b.className = "lens"; b.textContent = f + "mm"; b.dataset.f = f;
+  b.addEventListener("click", function(){ S.focal = f; syncLensUI(); buildPrompt(); });
+  lensSet.appendChild(b);
+});
+function syncLensUI(){
+  lensSet.querySelectorAll(".lens").forEach(function(x){
+    x.classList.toggle("on", parseInt(x.dataset.f,10)===S.focal);
+  });
+}
+syncLensUI();
+document.getElementById("resetCam").addEventListener("click", function(){
+  setAngle(24); setDist(4); setHeight(1.6); setDutch(0);
+  setAimH(1.4); setPanT(0); setTiltT(0);
+  S.focal = 35; syncLensUI(); buildPrompt();
+});
+var lookSel = document.getElementById("lookSel");
+lookSel.addEventListener("change", function(){ S.lookAt = lookSel.value; buildPrompt(); });
+function refreshLookSelect(){
+  lookSel.innerHTML = "";
+  var og = document.createElement("option");
+  og.value = "group"; og.textContent = "Group center";
+  lookSel.appendChild(og);
+  actors.forEach(function(a){
+    var o = document.createElement("option");
+    o.value = a.id; o.textContent = "Actor " + actorName(a);
+    lookSel.appendChild(o);
+    var f = document.createElement("option");
+    f.value = a.id + ":face"; f.textContent = "Actor " + actorName(a) + " \u00B7 face";
+    lookSel.appendChild(f);
+  });
+  lookSel.value = S.lookAt;
+}
+
+/* ==================== look: lens kits, stocks, lighting, style ==================== */
+var LENSKITS = [
+ {id:"modern", n:"Modern spherical", ar:"16:9", p:""},
+ {id:"vintage", n:"Vintage spherical", ar:"16:9",
+  p:"vintage spherical glass with gentle halation, softened edges and warm low-contrast flares"},
+ {id:"anamorphic", n:"Anamorphic 2x", ar:"21:9",
+  p:"2x anamorphic lenses in a 2.39:1 widescreen frame, oval bokeh, subtle horizontal flares, gentle waterfall focus at the edges"},
+ {id:"diffusion", n:"Diffusion filtered", ar:"16:9",
+  p:"black diffusion filtration blooming the highlights and gently lifting texture"},
+ {id:"doczoom", n:"Doc zoom", ar:"16:9",
+  p:"documentary zoom-lens energy, utilitarian sharpness, the feel of a found moment"}
+];
+var STOCKS = [
+ {id:"digital", n:"Clean digital", p:""},
+ {id:"v250d", n:"Vision3 250D", p:"shot on Kodak Vision3 250D: fine grain, natural daylight color, soft highlight rolloff"},
+ {id:"v500t", n:"Vision3 500T", p:"shot on Kodak Vision3 500T pushed a stop: visible grain, warm practicals against cool shadow"},
+ {id:"ekta", n:"Ektachrome", p:"Ektachrome reversal look: crisp, punchy saturation and confident contrast"},
+ {id:"print2383", n:"2383 print", p:"graded through a Kodak 2383 film print emulation: deep blacks, teal shadow, warm skin"},
+ {id:"bw", n:"Double-X B&W", p:"black and white Double-X negative: silver grain, rich mid tones, deep contrast"},
+ {id:"s16", n:"Super 16", p:"Super 16mm: heavy organic grain, halation around light sources, slightly soft resolve"},
+ {id:"bleach", n:"Bleach bypass", p:"bleach bypass process: drained color, harsh metallic contrast, retained silver in the blacks"}
+];
+var LIGHTS = [
+ {id:"none", n:"As blocked", p:""},
+ {id:"window", n:"Soft window", p:"lit by soft motivated window light from one side, gentle falloff into shadow"},
+ {id:"golden", n:"Golden hour", p:"low golden-hour sun backlighting the subjects, long shadows, warm haze hanging in the air"},
+ {id:"highkey", n:"High-key", p:"bright high-key lighting, airy fill, minimal shadow, clean commercial polish"},
+ {id:"noir", n:"Low-key noir", p:"low-key noir lighting from one hard source, blinds cutting slatted shadows across the scene"},
+ {id:"neon", n:"Neon night", p:"night exterior lit by mixed neon practicals reflecting off wet asphalt, magenta and cyan spill"},
+ {id:"fire", n:"Firelight", p:"lit by flickering warm firelight from below, deep surrounding darkness"},
+ {id:"overcast", n:"Overcast", p:"flat overcast daylight, soft shadowless wrap, muted color"},
+ {id:"sodium", n:"Sodium vapor", p:"night street washed in orange sodium-vapor lamps, near-monochrome pools of light"},
+ {id:"fluor", n:"Fluorescent", p:"institutional fluorescent tubes overhead, faintly green, even and unflattering"}
+];
+var LOOKSTYLES = [
+ {id:"none", n:"None", p:""},
+ {id:"naturalist", n:"Naturalist epic",
+  p:"composed with the discipline of the Deakins school: motivated single sources, silhouettes against light, uncluttered frames held with intent"},
+ {id:"storybook", n:"Symmetrical storybook",
+  p:"planimetric storybook staging in the Wes Anderson school: dead-center symmetry, flat frontal blocking, coordinated pastel palette"},
+ {id:"chiaroscuro", n:"Painterly chiaroscuro",
+  p:"painterly chiaroscuro after the Storaro school: sculpted warm-cool color contrast, figures emerging from darkness"},
+ {id:"kinetic", n:"Kinetic handheld",
+  p:"restless verite energy of the Greengrass school: reactive handheld framing, searching focus, cut-ready momentum"},
+ {id:"neonoir", n:"Neon noir",
+  p:"moody neon noir after the Doyle and Refn school: saturated color fields, lonely figures, patient tableaux"},
+ {id:"formalist", n:"Cold formalist",
+  p:"cold formalist precision of the Fincher school: locked deliberate camera, desaturated greens and steel blues, surgical composition"},
+ {id:"lyrical", n:"Lyrical natural light",
+  p:"lyrical available-light drift of the Malick and Lubezki school: wide lenses close to the subjects, sun flaring through movement"},
+ {id:"tableau", n:"Slow cinema tableau",
+  p:"slow cinema tableau in the Tarr and Tarkovsky lineage: long-duration weight, dense atmosphere, meticulous depth staging"}
+];
+var LOOK = {kit:"modern", stock:"digital", light:"none", style:"none", ap:"auto", notes:""};
+var APERTURES = [
+ {id:"auto", n:"Auto", p:""},
+ {id:"t13", n:"T1.3", p:"wide open at T1.3: razor-thin depth of field, the background dissolved into bokeh"},
+ {id:"t2",  n:"T2",   p:"shooting at T2: shallow depth of field isolating the subject from a soft background"},
+ {id:"t28", n:"T2.8", p:"shooting at T2.8: gently shallow focus with readable background shapes"},
+ {id:"t4",  n:"T4",   p:"shooting at T4: balanced focus holding the environment in soft detail"},
+ {id:"t8",  n:"T8",   p:"stopped down to T8: deep focus, sharp from foreground to background"}
+];
+function lookItem(list, id){
+  return list.find(function(x){ return x.id === id; }) || list[0];
+}
+function currentAR(){ return lookItem(LENSKITS, LOOK.kit).ar === "21:9" ? 21/9 : 16/9; }
+function currentARString(){ return lookItem(LENSKITS, LOOK.kit).ar; }
+function applyAspect(){
+  camA.aspect = currentAR();
+  proxy.aspect = camA.aspect;
+  resize();
+}
+var kitSel = document.getElementById("kitSel");
+var stockSel = document.getElementById("stockSel");
+var lightSel = document.getElementById("lightSel");
+var styleSel = document.getElementById("styleSel");
+var apSel = document.getElementById("apSel");
+var lookNotesEl = document.getElementById("lookNotes");
+function fillLookSelect(sel, list, onpick){
+  list.forEach(function(x){
+    var o = document.createElement("option");
+    o.value = x.id; o.textContent = x.n;
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", function(){ onpick(sel.value); buildPrompt(); });
+}
+fillLookSelect(kitSel, LENSKITS, function(v){ LOOK.kit = v; applyAspect(); });
+fillLookSelect(stockSel, STOCKS, function(v){ LOOK.stock = v; });
+fillLookSelect(lightSel, LIGHTS, function(v){ LOOK.light = v; });
+fillLookSelect(styleSel, LOOKSTYLES, function(v){ LOOK.style = v; });
+fillLookSelect(apSel, APERTURES, function(v){ LOOK.ap = v; });
+lookNotesEl.addEventListener("input", function(){ LOOK.notes = lookNotesEl.value; buildPrompt(); });
+function syncLookUI(){
+  kitSel.value = LOOK.kit; stockSel.value = LOOK.stock;
+  lightSel.value = LOOK.light; styleSel.value = LOOK.style;
+  apSel.value = LOOK.ap;
+  lookNotesEl.value = LOOK.notes;
+  applyAspect();
+}
+
+/* ==================== UI: camera keys ==================== */
+function renderKeyChips(){
+  var kc = document.getElementById("keyChips");
+  kc.innerHTML = "";
+  camKeys.forEach(function(k, i){
+    var b = document.createElement("button");
+    b.className = "achip";
+    b.style.width = "auto"; b.style.padding = "0 8px"; b.style.fontSize = "10px";
+    b.innerHTML = "K" + (i+1) + " <span class='sdel'>&times;</span>";
+    b.title = k.angle + "\u00B0 \u00B7 " + k.dist.toFixed(1) + "m \u00B7 " + Math.round(k.focal) + "mm";
+    b.addEventListener("click", function(){
+      setAngle(k.angle); setDist(k.dist); setHeight(k.h); setDutch(k.dutch);
+      setPanT(k.panT); setTiltT(k.tiltT);
+      S.focal = k.focal; syncLensUI(); buildPrompt();
+    });
+    b.querySelector(".sdel").addEventListener("click", function(ev){
+      ev.stopPropagation();
+      camKeys.splice(i, 1);
+      if(selMove === "keyed" && camKeys.length < 2){ selMove = null; syncRec(); }
+      renderKeyChips(); buildPrompt();
+    });
+    kc.appendChild(b);
+  });
+}
+document.getElementById("keyAdd").addEventListener("click", function(){
+  camKeys.push({angle:S.angle, dist:S.dist, h:S.h, focal:S.focal,
+    dutch:S.dutch, panT:S.panT, tiltT:S.tiltT});
+  renderKeyChips();
+  if(selMove === "keyed") buildPrompt();
+  showToast("K" + camKeys.length + " SET");
+});
+document.getElementById("keyPlay").addEventListener("click", function(){
+  if(camKeys.length < 2){ showToast("SET AT LEAST TWO KEYS"); return; }
+  selMove = "keyed"; prevT = 0;
+  transport.playing = true; transport.hold = 0; syncPlayBtn();
+  syncRec(); renderCards(); buildPrompt();
+  showToast("PLAYING " + camKeys.length + " KEYS");
+});
+document.getElementById("keyClear").addEventListener("click", function(){
+  camKeys = [];
+  if(selMove === "keyed"){ selMove = null; syncRec(); }
+  renderKeyChips(); buildPrompt();
+});
+
+/* ==================== UI: actors ==================== */
+var presetRow = document.getElementById("presetRow");
+PRESETS.forEach(function(p){
+  var b = document.createElement("button");
+  b.className = "preset"; b.textContent = p.n;
+  b.addEventListener("click", function(){ applyBlocking(p); });
+  presetRow.appendChild(b);
+});
+var chipsEl = document.getElementById("actorChips");
+var animSel = document.getElementById("aAnim");
+function fillAnimSelect(a){
+  animSel.innerHTML = "";
+  if(a && a.custom){
+    if(a.custom.clips.length){
+      a.custom.clips.forEach(function(c,i){
+        var o = document.createElement("option");
+        o.value = "clip:"+i; o.textContent = c.name || ("clip "+i);
+        animSel.appendChild(o);
+      });
+      animSel.value = "clip:" + a.custom.clipIndex;
+    } else {
+      var o = document.createElement("option");
+      o.value = "none"; o.textContent = "no clips in file";
+      animSel.appendChild(o);
+    }
+  } else {
+    ANIMS.forEach(function(d){
+      var o = document.createElement("option");
+      o.value = d.id; o.textContent = d.id.charAt(0).toUpperCase()+d.id.slice(1);
+      animSel.appendChild(o);
+    });
+    if(a) animSel.value = a.anim;
+  }
+}
+animSel.addEventListener("change", function(){
+  var a = selectedActor(); if(!a) return;
+  if(a.custom){
+    var i = parseInt(animSel.value.split(":")[1],10);
+    if(!isNaN(i) && a.custom.clips[i]) playClip(a, i);
+  } else {
+    a.anim = animSel.value;
+  }
+  buildPrompt();
+});
+var modelSel = document.getElementById("aModel");
+MANN_STYLES.forEach(function(ms){
+  var o = document.createElement("option");
+  o.value = ms.id; o.textContent = ms.n;
+  modelSel.appendChild(o);
+});
+var oCustom = document.createElement("option");
+oCustom.value = "custom"; oCustom.textContent = "Imported .glb";
+modelSel.appendChild(oCustom);
+modelSel.addEventListener("change", function(){
+  var a = selectedActor(); if(!a) return;
+  if(modelSel.value === "custom"){
+    if(!a.custom) glbInput.click();
+    return;
+  }
+  setActorModel(a, modelSel.value);
+});
+function setActorModel(a, styleId){
+  if(a.custom){
+    a.group.remove(a.custom.root);
+    a.custom = null;
+  }
+  a.group.remove(a.parts.mann);
+  a.parts = makeMannequin(styleId);
+  a.mstyle = styleId;
+  a.group.add(a.parts.mann);
+  fillAnimSelect(a);
+  buildPrompt();
+}
+var setAX = bindRange("aX","oAX",function(v){return v.toFixed(1)+"m";},function(v){
+  var a = selectedActor(); if(a){ a.x=v; a.group.position.x=v; }
+});
+var setAZ = bindRange("aZ","oAZ",function(v){return v.toFixed(1)+"m";},function(v){
+  var a = selectedActor(); if(a){ a.z=v; a.group.position.z=v; }
+});
+var setAFace = bindRange("aFace","oAFace",function(v){return v+"\u00B0";},function(v){
+  var a = selectedActor(); if(a){ a.face=v; a.group.rotation.y=M.degToRad(v); }
+});
+function syncActorSliders(){
+  var a = selectedActor(); if(!a) return;
+  setAX(a.x); setAZ(a.z); setAFace(a.face);
+  modelSel.value = a.custom ? "custom" : (a.mstyle || "botLight");
+  fillAnimSelect(a);
+}
+function renderActorUI(){
+  chipsEl.innerHTML = "";
+  actors.forEach(function(a){
+    var b = document.createElement("button");
+    b.className = "achip" + (a.id===selActor ? " on" : "");
+    b.textContent = actorName(a);
+    b.title = "Select actor " + actorName(a);
+    b.addEventListener("click", function(){
+      selActor = a.id; renderActorUI();
+    });
+    chipsEl.appendChild(b);
+  });
+  var add = document.createElement("button");
+  add.className = "achip add"; add.textContent = "+";
+  add.title = "Add actor";
+  add.addEventListener("click", function(){
+    var a = addActor({x:(Math.random()*2-1)*1.5, z:(Math.random()*2-1)*1.5});
+    if(a){ refreshLookSelect(); renderActorUI(); buildPrompt(); }
+  });
+  chipsEl.appendChild(add);
+  syncActorSliders();
+  refreshLookSelect();
+}
+document.getElementById("removeActor").addEventListener("click", function(){
+  if(selActor){ removeActorById(selActor); refreshLookSelect(); renderActorUI(); buildPrompt(); }
+});
+
+/* ==================== UI: set pieces ==================== */
+var setPresetRow = document.getElementById("setPresetRow");
+SETPRESETS.forEach(function(sp){
+  var b = document.createElement("button");
+  b.className = "preset"; b.textContent = sp.n;
+  b.addEventListener("click", function(){
+    applySetPreset(sp); renderPieceUI();
+    showToast(sp.n.toUpperCase() + " SET");
+  });
+  setPresetRow.appendChild(b);
+});
+var pieceChips = document.getElementById("pieceChips");
+var pTypeSel = document.getElementById("pType");
+PIECE_TYPES.forEach(function(t){
+  var o = document.createElement("option");
+  o.value = t.id; o.textContent = t.n;
+  pTypeSel.appendChild(o);
+});
+function pieceTypeName(id){
+  var t = PIECE_TYPES.find(function(x){return x.id===id;});
+  return t ? t.n : id;
+}
+function pieceLabel(p){
+  var idx = pieces.filter(function(q){return q.type===p.type;}).indexOf(p) + 1;
+  return p.type.slice(0,2).toUpperCase() + idx;
+}
+var setPX = bindRange("pX","oPX",function(v){return v.toFixed(1)+"m";},function(v){
+  var p = selectedPiece(); if(p){ p.x=v; p.group.position.x=v; }
+});
+var setPZ = bindRange("pZ","oPZ",function(v){return v.toFixed(1)+"m";},function(v){
+  var p = selectedPiece(); if(p){ p.z=v; p.group.position.z=v; }
+});
+var setPRot = bindRange("pRot","oPRot",function(v){return v+"\u00B0";},function(v){
+  var p = selectedPiece(); if(p){ p.rot=v; p.group.rotation.y=M.degToRad(v); }
+});
+var setPScale = bindRange("pScale","oPScale",function(v){return v.toFixed(2)+"x";},function(v){
+  var p = selectedPiece(); if(p){ p.scale=v; p.group.children[0].scale.setScalar(v); }
+});
+function syncPieceSliders(){
+  var p = selectedPiece(); if(!p) return;
+  setPX(p.x); setPZ(p.z); setPRot(p.rot); setPScale(p.scale);
+}
+function renderPieceUI(){
+  pieceChips.innerHTML = "";
+  pieces.forEach(function(p){
+    var b = document.createElement("button");
+    b.className = "achip" + (p.id===selPiece ? " on" : "");
+    b.style.width = "auto"; b.style.padding = "0 9px"; b.style.fontSize = "10px";
+    b.textContent = pieceLabel(p);
+    b.title = pieceTypeName(p.type);
+    b.addEventListener("click", function(){ selPiece = p.id; renderPieceUI(); });
+    pieceChips.appendChild(b);
+  });
+  syncPieceSliders();
+}
+document.getElementById("addPiece").addEventListener("click", function(){
+  addPiece({type:pTypeSel.value, x:(Math.random()*2-1)*2, z:(Math.random()*2-1)*2});
+  renderPieceUI();
+});
+document.getElementById("dupPiece").addEventListener("click", function(){
+  var p = selectedPiece(); if(!p){ showToast("NO PIECE SELECTED"); return; }
+  addPiece({type:p.type, x:p.x+0.6, z:p.z+0.6, rot:p.rot, scale:p.scale});
+  renderPieceUI();
+});
+document.getElementById("removePiece").addEventListener("click", function(){
+  var p = selectedPiece(); if(!p){ showToast("NO PIECE SELECTED"); return; }
+  removePieceById(p.id);
+  renderPieceUI();
+});
+
+/* ==================== GLB import (minimal glTF 2.0 parser) ==================== */
+function parseGLB(buf){
+  var json = null, bin = null;
+  var dv = new DataView(buf);
+  if(buf.byteLength >= 12 && dv.getUint32(0,true) === 0x46546C67){
+    var total = dv.getUint32(8,true), p = 12;
+    while(p + 8 <= total){
+      var clen = dv.getUint32(p,true), ctype = dv.getUint32(p+4,true); p += 8;
+      if(ctype === 0x4E4F534A) json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf,p,clen)));
+      else if(ctype === 0x004E4942) bin = buf.slice(p, p+clen);
+      p += clen;
+    }
+  } else {
+    json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf)));
+  }
+  if(!json) throw new Error("No glTF JSON found");
+  return buildGLTF(json, bin);
+}
+function buildGLTF(j, bin){
+  var buffers = (j.buffers||[]).map(function(b){
+    if(b.uri){
+      if(b.uri.indexOf("data:") === 0){
+        var b64 = b.uri.slice(b.uri.indexOf(",")+1);
+        var s = atob(b64), arr = new Uint8Array(s.length);
+        for(var i=0;i<s.length;i++) arr[i] = s.charCodeAt(i);
+        return arr.buffer;
+      }
+      throw new Error("External .bin buffers not supported here. Export as a single .glb.");
+    }
+    return bin;
+  });
+  var CT = {5120:Int8Array,5121:Uint8Array,5122:Int16Array,5123:Uint16Array,5125:Uint32Array,5126:Float32Array};
+  var NC = {SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT2:4,MAT3:9,MAT4:16};
+  function acc(i){
+    var a = j.accessors[i];
+    var bv = j.bufferViews[a.bufferView||0];
+    var T = CT[a.componentType], n = NC[a.type];
+    var buf0 = buffers[bv.buffer];
+    var off = (bv.byteOffset||0) + (a.byteOffset||0);
+    var stride = bv.byteStride;
+    var compact = n * T.BYTES_PER_ELEMENT;
+    if(stride && stride !== compact){
+      var out = new T(a.count*n);
+      for(var k=0;k<a.count;k++){
+        var src = new T(buf0, off + k*stride, n);
+        out.set(src, k*n);
+      }
+      return {arr:out, n:n};
+    }
+    return {arr:new T(buf0, off, a.count*n), n:n};
+  }
+  var usedNames = {};
+  var jointSet = {};
+  (j.skins||[]).forEach(function(s){ (s.joints||[]).forEach(function(ji){ jointSet[ji]=1; }); });
+  var nodeObjs = (j.nodes||[]).map(function(nd, i){
+    var o = jointSet[i] ? new THREE.Bone() : new THREE.Group();
+    var nm = (nd.name || ("node"+i)).replace(/[^a-zA-Z0-9_]/g,"_");
+    while(usedNames[nm]) nm += "_";
+    usedNames[nm] = 1; o.name = nm;
+    if(nd.matrix){
+      var m = new THREE.Matrix4().fromArray(nd.matrix);
+      m.decompose(o.position, o.quaternion, o.scale);
+    } else {
+      if(nd.translation) o.position.fromArray(nd.translation);
+      if(nd.rotation) o.quaternion.fromArray(nd.rotation);
+      if(nd.scale) o.scale.fromArray(nd.scale);
+    }
+    return o;
+  });
+  (j.nodes||[]).forEach(function(nd,i){
+    (nd.children||[]).forEach(function(ci){ nodeObjs[i].add(nodeObjs[ci]); });
+  });
+  var root = new THREE.Group(); root.name = "glbRoot";
+  var sceneDef = (j.scenes && j.scenes[j.scene||0]) || {nodes:[]};
+  (sceneDef.nodes||[]).forEach(function(ni){ root.add(nodeObjs[ni]); });
+
+  var pending = [];
+  (j.nodes||[]).forEach(function(nd,i){
+    if(nd.mesh === undefined) return;
+    var mdef = j.meshes[nd.mesh];
+    (mdef.primitives||[]).forEach(function(pr){
+      if(pr.mode !== undefined && pr.mode !== 4) return; /* triangles only */
+      var g = new THREE.BufferGeometry();
+      var A = pr.attributes || {};
+      if(A.POSITION === undefined) return;
+      var pd = acc(A.POSITION);
+      g.setAttribute("position", new THREE.BufferAttribute(pd.arr, 3));
+      if(A.NORMAL !== undefined){
+        var ndat = acc(A.NORMAL);
+        g.setAttribute("normal", new THREE.BufferAttribute(ndat.arr, 3));
+      }
+      var skinned = nd.skin !== undefined && A.JOINTS_0 !== undefined;
+      if(skinned){
+        var jd = acc(A.JOINTS_0);
+        g.setAttribute("skinIndex", new THREE.BufferAttribute(jd.arr, 4));
+        var wd = acc(A.WEIGHTS_0);
+        var warr = wd.arr;
+        if(!(warr instanceof Float32Array)){
+          var f = new Float32Array(warr.length);
+          var mx = (warr instanceof Uint8Array || warr instanceof Int8Array) ? 255 : 65535;
+          for(var q=0;q<warr.length;q++) f[q] = warr[q]/mx;
+          warr = f;
+        }
+        g.setAttribute("skinWeight", new THREE.BufferAttribute(warr, 4));
+      }
+      if(pr.indices !== undefined){
+        var idx = acc(pr.indices);
+        g.setIndex(new THREE.BufferAttribute(idx.arr, 1));
+      }
+      if(A.NORMAL === undefined) g.computeVertexNormals();
+      var col = new THREE.Color(0x9aa0a8);
+      if(pr.material !== undefined && j.materials && j.materials[pr.material]){
+        var md = j.materials[pr.material];
+        var bcf = md.pbrMetallicRoughness && md.pbrMetallicRoughness.baseColorFactor;
+        if(bcf) col = new THREE.Color(bcf[0], bcf[1], bcf[2]);
+      }
+      var mat = new THREE.MeshStandardMaterial({color:col, roughness:0.85, metalness:0, skinning:skinned});
+      var mesh = skinned ? new THREE.SkinnedMesh(g, mat) : new THREE.Mesh(g, mat);
+      mesh.castShadow = true;
+      mesh.frustumCulled = false;
+      nodeObjs[i].add(mesh);
+      if(skinned) pending.push({mesh:mesh, skin:j.skins[nd.skin]});
+    });
+  });
+  root.updateMatrixWorld(true);
+  pending.forEach(function(p){
+    var bones = (p.skin.joints||[]).map(function(ji){ return nodeObjs[ji]; });
+    var inv = [];
+    if(p.skin.inverseBindMatrices !== undefined){
+      var d = acc(p.skin.inverseBindMatrices).arr;
+      for(var k=0;k<bones.length;k++){
+        var mm = new THREE.Matrix4();
+        for(var c=0;c<16;c++) mm.elements[c] = d[k*16+c];
+        inv.push(mm);
+      }
+    } else {
+      bones.forEach(function(){ inv.push(new THREE.Matrix4()); });
+    }
+    p.mesh.bind(new THREE.Skeleton(bones, inv), p.mesh.matrixWorld);
+    if(p.mesh.normalizeSkinWeights) p.mesh.normalizeSkinWeights();
+  });
+  var clips = (j.animations||[]).map(function(an, ai){
+    var tracks = [];
+    (an.channels||[]).forEach(function(ch){
+      if(!ch.target || ch.target.node === undefined) return;
+      var sp = an.samplers[ch.sampler];
+      var times = acc(sp.input).arr;
+      var od = acc(sp.output);
+      var vals = od.arr, n = od.n;
+      if(sp.interpolation === "CUBICSPLINE"){
+        var keys = times.length;
+        var flat = new Float32Array(keys*n);
+        for(var k=0;k<keys;k++)
+          for(var c=0;c<n;c++) flat[k*n+c] = vals[(k*3+1)*n+c];
+        vals = flat;
+      }
+      if(!(vals instanceof Float32Array)) vals = Float32Array.from(vals);
+      if(!(times instanceof Float32Array)) times = Float32Array.from(times);
+      var nm = nodeObjs[ch.target.node].name;
+      try{
+        if(ch.target.path === "translation")
+          tracks.push(new THREE.VectorKeyframeTrack(nm+".position", times, vals));
+        else if(ch.target.path === "rotation")
+          tracks.push(new THREE.QuaternionKeyframeTrack(nm+".quaternion", times, vals));
+        else if(ch.target.path === "scale")
+          tracks.push(new THREE.VectorKeyframeTrack(nm+".scale", times, vals));
+      }catch(err){}
+    });
+    return new THREE.AnimationClip(an.name || ("clip "+ai), -1, tracks);
+  }).filter(function(c){ return c.tracks.length; });
+  return {root:root, clips:clips};
+}
+function playClip(a, i){
+  var c = a.custom; if(!c || !c.clips[i]) return;
+  if(c.action) c.action.stop();
+  c.action = c.mixer.clipAction(c.clips[i]);
+  c.action.reset().play();
+  c.clipIndex = i;
+  c.clipName = c.clips[i].name || ("clip "+i);
+}
+var glbInput = document.getElementById("glbInput");
+document.getElementById("importChar").addEventListener("click", function(){
+  if(!selectedActor()){ showToast("SELECT AN ACTOR FIRST"); return; }
+  glbInput.click();
+});
+glbInput.addEventListener("change", function(){
+  var file = glbInput.files && glbInput.files[0];
+  glbInput.value = "";
+  if(!file) return;
+  var a = selectedActor(); if(!a) return;
+  var fr = new FileReader();
+  fr.onload = function(){
+    try{
+      var res = parseGLB(fr.result);
+      var box = new THREE.Box3().setFromObject(res.root);
+      var hgt = box.max.y - box.min.y;
+      if(hgt > 0.001) res.root.scale.setScalar(1.72/hgt);
+      box.setFromObject(res.root);
+      res.root.position.y -= box.min.y;
+      if(a.custom) a.group.remove(a.custom.root);
+      a.parts.mann.visible = false;
+      a.custom = {root:res.root, clips:res.clips, mixer:new THREE.AnimationMixer(res.root),
+                  action:null, clipIndex:0, clipName:null};
+      a.group.add(res.root);
+      if(res.clips.length) playClip(a, 0);
+      fillAnimSelect(a);
+      modelSel.value = "custom";
+      buildPrompt();
+      showToast("CHARACTER ON ACTOR " + actorName(a) + (res.clips.length ? "" : " (NO CLIPS)"));
+    }catch(err){
+      showToast("COULD NOT READ FILE: " + (err.message||"unknown").toUpperCase());
+    }
+  };
+  fr.onerror = function(){ showToast("COULD NOT READ FILE"); };
+  fr.readAsArrayBuffer(file);
+});
+
+/* ==================== UI: movement library + animated previews ==================== */
+var activeCat = "All", query = "";
+var catsEl = document.getElementById("cats");
+CATS.forEach(function(c){
+  var b = document.createElement("button");
+  b.className = "cat" + (c==="All" ? " on" : "");
+  b.textContent = c;
+  b.addEventListener("click", function(){
+    activeCat = c;
+    catsEl.querySelectorAll(".cat").forEach(function(x){x.classList.remove("on");});
+    b.classList.add("on");
+    renderCards();
+  });
+  catsEl.appendChild(b);
+});
+document.getElementById("search").addEventListener("input", function(e){
+  query = e.target.value.toLowerCase();
+  renderCards();
+});
+
+var THUMB_BASE = {theta:0.5, dist:3, h:1.5, focal:35, roll:0, panT:0, tiltT:0};
+var THUMB_TG = V3(0,1.2,0);
+var pathCache = {};
+function movePath(id){
+  if(pathCache[id]) return pathCache[id];
+  var pts = [];
+  for(var i=0;i<=26;i++){
+    computePose(id, ease(i/26), 0, THUMB_BASE, THUMB_TG, V3(0,0,0));
+    pts.push({x:ghost.position.x, y:ghost.position.y, z:ghost.position.z});
+  }
+  pathCache[id] = pts;
+  return pts;
+}
+var thumbs = [];
+var cardsEl = document.getElementById("cards");
+function renderCards(){
+  cardsEl.innerHTML = "";
+  thumbs = [];
+  var shown = 0;
+  MOVES.forEach(function(m){
+    if(activeCat !== "All" && m.c !== activeCat) return;
+    if(query && (m.n+" "+m.p+" "+m.c).toLowerCase().indexOf(query) === -1) return;
+    shown++;
+    var card = document.createElement("div");
+    card.className = "card" + (selMove===m.id ? " sel" : "");
+    card.setAttribute("role","button");
+    card.setAttribute("tabindex","0");
+    var cv = document.createElement("canvas");
+    cv.className = "thumb"; cv.width = 192; cv.height = 120;
+    card.appendChild(cv);
+    var body = document.createElement("div");
+    body.className = "card-body";
+    body.innerHTML =
+      '<div class="card-top"><span class="card-name"></span>' +
+      '<button class="card-copy">copy</button></div>' +
+      '<span class="card-cat"></span><p></p>' +
+      '<div class="playing">&#9654; previewing on A cam &middot; tap to stop</div>';
+    body.querySelector(".card-name").textContent = m.n;
+    body.querySelector(".card-cat").textContent = m.c;
+    body.querySelector("p").textContent = m.p;
+    card.appendChild(body);
+    card.addEventListener("click", function(){ toggleMove(m.id); });
+    card.addEventListener("keydown", function(e){
+      if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggleMove(m.id); }
+    });
+    body.querySelector(".card-copy").addEventListener("click", function(e){
+      e.stopPropagation(); copyText(m.p);
+    });
+    cardsEl.appendChild(card);
+    var ctx = cv.getContext("2d");
+    ctx.scale(2,2);
+    thumbs.push({m:m, ctx:ctx});
+  });
+  document.getElementById("count").textContent =
+    shown + " of " + MOVES.length + " moves \u00B7 " + (CATS.length-1) +
+    " categories \u00B7 live previews from the same math that drives the A cam";
+}
+function toggleMove(id){
+  selMove = (selMove === id) ? null : id;
+  prevT = 0;
+  transport.playing = true;
+  transport.hold = 0;
+  syncPlayBtn();
+  syncRec();
+  renderCards();
+  buildPrompt();
+}
+function syncRec(){
+  document.getElementById("mRec").classList.toggle("on",
+    !!selMove && selMove!=="static" && selMove!=="timelapse");
+}
+function drawThumb(t, e, time){
+  var ctx = t.ctx, m = t.m;
+  var W = 96, H = 60;
+  ctx.clearRect(0,0,W,H);
+  if(m.view === "frame"){
+    /* dutch: a tilting frame */
+    var roll = Math.sin(e*Math.PI)*24*Math.PI/180;
+    ctx.save();
+    ctx.translate(W/2, H/2);
+    ctx.rotate(-roll);
+    ctx.strokeStyle = "#ff6a13"; ctx.lineWidth = 1.5;
+    ctx.strokeRect(-20,-12,40,24);
+    ctx.strokeStyle = "rgba(37,208,196,.5)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-16,4); ctx.lineTo(16,4); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  var focal = computePose(m.id, e, time, THUMB_BASE, THUMB_TG, V3(0,0,0));
+  var px, py, dx, dy;
+  var dir = V3(0,0,-1).applyQuaternion(ghost.quaternion);
+  if(m.view === "side"){
+    var sc = 6.5, gx = 26, gy = 52;
+    px = gx + ghost.position.z*sc;
+    py = gy - ghost.position.y*sc;
+    dx = dir.z; dy = -dir.y;
+    /* ground + subject */
+    ctx.strokeStyle = "rgba(139,143,150,.4)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(4,gy); ctx.lineTo(W-4,gy); ctx.stroke();
+    ctx.strokeStyle = "#eceae4";
+    ctx.beginPath(); ctx.moveTo(gx,gy); ctx.lineTo(gx,gy-11); ctx.stroke();
+    ctx.fillStyle = "#eceae4";
+    ctx.beginPath(); ctx.arc(gx,gy-13,1.8,0,7); ctx.fill();
+    /* path */
+    var pts = movePath(m.id);
+    ctx.strokeStyle = "rgba(37,208,196,.4)"; ctx.beginPath();
+    pts.forEach(function(p,i){
+      var ppx = gx + p.z*sc, ppy = Math.max(4, gy - p.y*sc);
+      if(i===0) ctx.moveTo(ppx,ppy); else ctx.lineTo(ppx,ppy);
+    });
+    ctx.stroke();
+    py = Math.max(4, py);
+  } else {
+    var sc2 = 6.5, cx = W/2, cy = H/2 + 4;
+    px = cx + ghost.position.x*sc2;
+    py = cy + ghost.position.z*sc2;
+    dx = dir.x; dy = dir.z;
+    /* subject */
+    ctx.fillStyle = "#eceae4";
+    ctx.beginPath(); ctx.arc(cx,cy,2.2,0,7); ctx.fill();
+    ctx.strokeStyle = "rgba(236,234,228,.35)";
+    ctx.beginPath(); ctx.arc(cx,cy,4.5,0,7); ctx.stroke();
+    /* path */
+    var pts2 = movePath(m.id);
+    ctx.strokeStyle = "rgba(37,208,196,.4)"; ctx.lineWidth = 1; ctx.beginPath();
+    pts2.forEach(function(p,i){
+      var ppx = cx + p.x*sc2, ppy = cy + p.z*sc2;
+      if(i===0) ctx.moveTo(ppx,ppy); else ctx.lineTo(ppx,ppy);
+    });
+    ctx.stroke();
+  }
+  /* camera wedge */
+  var ang = Math.atan2(dy, dx);
+  var half = Math.atan(18/focal);
+  var L = 13;
+  ctx.strokeStyle = "#ff6a13"; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(px + Math.cos(ang-half)*L, py + Math.sin(ang-half)*L);
+  ctx.lineTo(px, py);
+  ctx.lineTo(px + Math.cos(ang+half)*L, py + Math.sin(ang+half)*L);
+  ctx.stroke();
+  ctx.fillStyle = "#eceae4";
+  ctx.beginPath(); ctx.arc(px,py,2,0,7); ctx.fill();
+}
+
+/* ==================== copy / toast ==================== */
+var toast = document.getElementById("toast"), toastTimer;
+function showToast(msg){
+  toast.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ toast.classList.remove("show"); }, 1900);
+}
+function copyText(t){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){ showToast("COPIED"); },
+      function(){ fallbackCopy(t); });
+  } else fallbackCopy(t);
+}
+function fallbackCopy(t){
+  var ta = document.createElement("textarea");
+  ta.value = t; document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand("copy"); showToast("COPIED"); }
+  catch(e){ showToast("SELECT AND COPY MANUALLY"); }
+  document.body.removeChild(ta);
+}
+document.getElementById("copyPrompt").addEventListener("click", function(){
+  copyText(document.getElementById("promptBox").textContent);
+});
+function dl(name, data, mime){
+  var blob = (data instanceof Blob) ? data : new Blob([data], {type:mime||"text/plain"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+
+/* ==================== exports ==================== */
+function exportFrame(){
+  var mv = (selMove && selMove!=="static" && selMove!=="timelapse") ? selMove : null;
+  applyPoseToCam(mv, lastE, 0);
+  helper.visible = false; rig.visible = false;
+  mon.render(scene, camA);
+  var url = monCanvas.toDataURL("image/png");
+  helper.visible = true; rig.visible = true;
+  var a = document.createElement("a");
+  a.href = url; a.download = "backlot-reference-frame.png";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showToast("FRAME EXPORTED");
+}
+document.getElementById("exportFrame").addEventListener("click", exportFrame);
+document.getElementById("exportTop").addEventListener("click", exportFrame);
+
+function exportOBJ(){
+  var lines = ["# backlot greybox export", "# units: meters, Y up", ""];
+  var off = 0;
+  var vtx = new THREE.Vector3();
+  function writeMesh(mesh, name){
+    mesh.updateWorldMatrix(true, false);
+    var geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+    var pos = geo.attributes.position;
+    if(!pos) return;
+    lines.push("o " + name);
+    for(var i=0;i<pos.count;i++){
+      vtx.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      lines.push("v " + vtx.x.toFixed(5) + " " + vtx.y.toFixed(5) + " " + vtx.z.toFixed(5));
+    }
+    for(var f=0; f+2<pos.count; f+=3){
+      lines.push("f " + (off+f+1) + " " + (off+f+2) + " " + (off+f+3));
+    }
+    off += pos.count;
+    if(geo !== mesh.geometry) geo.dispose();
+  }
+  /* stage floor patch */
+  var patch = new THREE.Mesh(new THREE.PlaneGeometry(14,14));
+  patch.rotation.x = -Math.PI/2;
+  scene.add(patch); patch.updateWorldMatrix(true,false);
+  writeMesh(patch, "stage_floor");
+  scene.remove(patch);
+  /* set pieces */
+  if(DOME.showSet){
+    pieces.forEach(function(p, pi){
+      var k = 0;
+      p.group.traverse(function(o){
+        if(o.isMesh && o.geometry.type !== "PlaneGeometry"){
+          writeMesh(o, "set_" + p.type + "_" + pi + "_" + (k++));
+        }
+      });
+    });
+  }
+  /* actors at current pose */
+  actors.forEach(function(a){
+    var nm = "actor_" + actorName(a);
+    if(a.custom){
+      var box = new THREE.Box3().setFromObject(a.custom.root);
+      var size = box.getSize(new THREE.Vector3());
+      var ctr = box.getCenter(new THREE.Vector3());
+      var proxyBox = new THREE.Mesh(new THREE.BoxGeometry(
+        Math.max(size.x,0.1), Math.max(size.y,0.1), Math.max(size.z,0.1)));
+      proxyBox.position.copy(ctr);
+      scene.add(proxyBox); proxyBox.updateWorldMatrix(true,false);
+      writeMesh(proxyBox, nm + "_proxy");
+      scene.remove(proxyBox);
+    } else {
+      var pi = 0;
+      a.group.traverse(function(o){
+        if(o.isMesh && !o.userData.mat && o.geometry.type !== "PlaneGeometry"){
+          writeMesh(o, nm + "_" + (pi++));
+        }
+      });
+    }
+  });
+  /* A cam marker: body + a 4-sided view cone */
+  var camGrp = new THREE.Group();
+  camGrp.position.copy(camA.position);
+  camGrp.quaternion.copy(camA.quaternion);
+  var cb = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.24,0.4));
+  var cone = new THREE.Mesh(new THREE.ConeGeometry(0.22,0.6,4,1,true));
+  cone.rotation.x = -Math.PI/2;
+  cone.rotation.y = Math.PI/4;
+  cone.position.z = -0.5;
+  camGrp.add(cb); camGrp.add(cone);
+  scene.add(camGrp); camGrp.updateWorldMatrix(true,true);
+  writeMesh(cb, "camera_A_body");
+  writeMesh(cone, "camera_A_frustum");
+  scene.remove(camGrp);
+  dl("backlot-greybox.obj", lines.join("\n"), "text/plain");
+  showToast("GREYBOX OBJ EXPORTED");
+}
+document.getElementById("exportOBJ").addEventListener("click", exportOBJ);
+
+function shotData(){
+  return {
+    app:"backlot", version:2,
+    camera:{angle:S.angle, dist:S.dist, h:S.h, focal:S.focal, dutch:S.dutch,
+      aimH:S.aimH, panT:S.panT, tiltT:S.tiltT,
+      lookAt: S.lookAt==="group" ? "group" :
+        {i: actors.indexOf(lookParts().a), face: lookParts().face}},
+    look:{kit:LOOK.kit, stock:LOOK.stock, light:LOOK.light, style:LOOK.style, ap:LOOK.ap, notes:LOOK.notes},
+    dome:{rot:DOME.rot, h:DOME.h, R:DOME.R, bright:DOME.bright,
+      ground:DOME.ground, showSet:DOME.showSet, had:!!DOME.tex, builtin:DOME.builtin},
+    pieces: pieces.map(function(p){
+      return {type:p.type, x:p.x, z:p.z, rot:p.rot, scale:p.scale};
+    }),
+    actors: actors.map(function(a){
+      return {x:a.x, z:a.z, face:a.face, anim:a.anim, mstyle:a.mstyle, custom:!!a.custom};
+    }),
+    keys: camKeys.slice(),
+    move: selMove
+  };
+}
+function saveShot(){
+  dl("backlot-shot.json", JSON.stringify(shotData(), null, 2), "application/json");
+  showToast("SHOT SAVED");
+}
+document.getElementById("saveShot").addEventListener("click", saveShot);
+var shotInput = document.getElementById("shotInput");
+document.getElementById("loadShot").addEventListener("click", function(){ shotInput.click(); });
+function applyShotData(d){
+  if(!d || d.app!=="backlot" || !d.actors) throw new Error("not a backlot shot file");
+  while(actors.length) removeActorById(actors[0].id, true);
+  var hadCustom = false;
+  d.actors.slice(0,6).forEach(function(ad){
+    addActor({x:ad.x, z:ad.z, face:ad.face, anim:ad.anim, mstyle:ad.mstyle});
+    if(ad.custom) hadCustom = true;
+  });
+  if(!actors.length) addActor({});
+  while(pieces.length) removePieceById(pieces[0].id);
+  (d.pieces || SETPRESETS[1].pieces).forEach(function(pd){ addPiece(pd); });
+  selPiece = pieces.length ? pieces[0].id : null;
+  renderPieceUI();
+  applySetVisibility();
+  var c = d.camera || {};
+  setAngle(c.angle||0); setDist(c.dist||4); setHeight(c.h||1.6); setDutch(c.dutch||0);
+  setAimH(c.aimH||1.4); setPanT(c.panT||0); setTiltT(c.tiltT||0);
+  S.focal = c.focal || 35; syncLensUI();
+  if(typeof c.lookAt==="number" && actors[c.lookAt]) S.lookAt = actors[c.lookAt].id;
+  else if(c.lookAt && typeof c.lookAt==="object" && actors[c.lookAt.i])
+    S.lookAt = actors[c.lookAt.i].id + (c.lookAt.face ? ":face" : "");
+  else S.lookAt = "group";
+  selMove = d.move || null; prevT = 0;
+  camKeys = (d.keys || []).slice();
+  renderKeyChips();
+  if(selMove === "keyed" && camKeys.length < 2) selMove = null;
+  transport.playing = true; transport.hold = 0; syncPlayBtn();
+  if(d.look){
+    LOOK.kit = d.look.kit || "modern"; LOOK.stock = d.look.stock || "digital";
+    LOOK.light = d.look.light || "none"; LOOK.style = d.look.style || "none";
+    LOOK.ap = d.look.ap || "auto";
+    LOOK.notes = d.look.notes || "";
+  } else {
+    LOOK.kit = "modern"; LOOK.stock = "digital"; LOOK.light = "none";
+    LOOK.style = "none"; LOOK.ap = "auto"; LOOK.notes = "";
+  }
+  syncLookUI();
+  if(d.dome){
+    DOME.rot = d.dome.rot||0; DOME.h = d.dome.h||1.6; DOME.R = d.dome.R||30;
+    DOME.bright = d.dome.bright||1;
+    DOME.ground = d.dome.ground !== false;
+    DOME.showSet = d.dome.showSet !== false;
+    syncDomeUI(); buildDome(); applySetVisibility();
+    if(d.dome.builtin) applyBuiltinPano(d.dome.builtin);
+  }
+  selActor = actors[0].id;
+  refreshLookSelect(); renderActorUI(); renderCards(); buildPrompt(); syncRec();
+  var msg = "SHOT LOADED";
+  if(hadCustom) msg += " (RE-IMPORT .GLB CHARACTERS)";
+  if(d.dome && d.dome.had && !d.dome.builtin && !DOME.tex) msg += " (RE-IMPORT 360)";
+  return msg;
+}
+shotInput.addEventListener("change", function(){
+  var file = shotInput.files && shotInput.files[0];
+  shotInput.value = "";
+  if(!file) return;
+  var fr = new FileReader();
+  fr.onload = function(){
+    try{
+      showToast(applyShotData(JSON.parse(fr.result)));
+    }catch(err){
+      showToast("COULD NOT LOAD: " + (err.message||"unknown").toUpperCase());
+    }
+  };
+  fr.readAsText(file);
+});
+
+/* ==================== fal.ai generation ==================== */
+var genBusy = false;
+function genSetBusy(b){
+  genBusy = b;
+  ["genStill","genVideo","gen360"].forEach(function(id){
+    var el2 = document.getElementById(id);
+    if(el2) el2.disabled = b;
+  });
+}
+function setGenStatus(msg){ document.getElementById("genStatus").textContent = msg; }
+function captureFrame(e){
+  var mv = (selMove && selMove!=="static" && selMove!=="timelapse") ? selMove : null;
+  applyPoseToCam(mv, (e === undefined ? lastE : e), 0);
+  helper.visible = false; rig.visible = false;
+  mon.render(scene, camA);
+  var d = monCanvas.toDataURL("image/png");
+  helper.visible = true; rig.visible = true;
+  return d;
+}
+function pruneUnfilled(o){
+  if(Array.isArray(o)){
+    for(var i=o.length-1;i>=0;i--){
+      var v = o[i];
+      if(typeof v === "string" && /\{[A-Z_]+\}/.test(v)) o.splice(i,1);
+      else if(v && typeof v === "object") pruneUnfilled(v);
+    }
+  } else {
+    Object.keys(o).forEach(function(k){
+      var v = o[k];
+      if(typeof v === "string" && /\{[A-Z_]+\}/.test(v)) delete o[k];
+      else if(v && typeof v === "object") pruneUnfilled(v);
+    });
+  }
+  return o;
+}
+function fillTemplate(tplText, map){
+  var obj = JSON.parse(tplText);
+  (function walk(o){
+    Object.keys(o).forEach(function(k){
+      var v = o[k];
+      if(typeof v === "string"){
+        Object.keys(map).forEach(function(ph){
+          if(v.indexOf(ph) !== -1) v = (v === ph) ? map[ph] : v.split(ph).join(map[ph]);
+        });
+        o[k] = v;
+      } else if(v && typeof v === "object") walk(v);
+    });
+  })(obj);
+  return obj;
+}
+function falSubmit(ep, payload, key){
+  return fetch("https://queue.fal.run/" + ep, {
+    method:"POST",
+    headers:{"Authorization":"Key " + key, "Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  }).then(function(r){
+    return r.json().then(function(jd){
+      if(!r.ok) throw new Error(jd && jd.detail ? JSON.stringify(jd.detail) : ("HTTP " + r.status));
+      return jd;
+    });
+  });
+}
+function falPoll(sub, key, label){
+  return new Promise(function(res, rej){
+    var t0 = Date.now();
+    (function loop(){
+      fetch(sub.status_url, {headers:{"Authorization":"Key " + key}})
+        .then(function(r){ return r.json(); })
+        .then(function(s){
+          var secs = Math.round((Date.now()-t0)/1000);
+          if(s.status === "COMPLETED"){
+            setGenStatus(label + ": fetching result...");
+            fetch(sub.response_url, {headers:{"Authorization":"Key " + key}})
+              .then(function(r){ return r.json(); }).then(res, rej);
+          } else if(s.status === "FAILED" || s.status === "ERROR"){
+            rej(new Error(label + " failed on fal"));
+          } else {
+            setGenStatus(label + ": " + (s.status === "IN_QUEUE"
+              ? ("queued" + (s.queue_position != null ? " #" + s.queue_position : ""))
+              : "rendering") + " \u00B7 " + secs + "s");
+            setTimeout(loop, 2500);
+          }
+        }).catch(rej);
+    })();
+  });
+}
+function mediaFromResult(r){
+  if(!r) return null;
+  if(r.video && r.video.url) return {type:"video", url:r.video.url};
+  if(r.images && r.images.length && r.images[0].url) return {type:"image", url:r.images[0].url};
+  if(r.image && r.image.url) return {type:"image", url:r.image.url};
+  return null;
+}
+function showResult(media){
+  var box = document.getElementById("genResult");
+  box.innerHTML = "";
+  var elw;
+  if(media.type === "video"){
+    elw = document.createElement("video");
+    elw.src = media.url; elw.controls = true; elw.loop = true;
+    elw.setAttribute("playsinline","");
+  } else {
+    elw = document.createElement("img");
+    elw.src = media.url; elw.alt = "generated frame";
+  }
+  box.appendChild(elw);
+  var a = document.createElement("a");
+  a.href = media.url; a.target = "_blank"; a.rel = "noopener";
+  a.textContent = "open full size";
+  box.appendChild(a);
+}
+function runGen(kind){
+  if(genBusy) return;
+  var key = document.getElementById("falKey").value.trim();
+  if(!key){ showToast("PASTE YOUR FAL KEY FIRST"); return; }
+  var ep = document.getElementById(kind === "video" ? "epVideo" : "epStill").value.trim();
+  var tpl = document.getElementById(kind === "video" ? "plVideo" : "plStill").value;
+  var payload;
+  try{
+    var map = {
+      "{PROMPT}": composePrompt(kind === "video"),
+      "{ASPECT}": currentARString(),
+      "{W}": 3840,
+      "{H}": currentAR() > 2 ? 1646 : 2160
+    };
+    if(kind === "video"){
+      map["{IMAGE}"] = captureFrame(0);
+      var mvOn = selMove && selMove!=="static" && selMove!=="timelapse";
+      if(mvOn && document.getElementById("useEndFrame").checked){
+        map["{IMAGE_END}"] = captureFrame(1);
+      }
+    } else {
+      map["{IMAGE}"] = captureFrame(lastE);
+    }
+    payload = pruneUnfilled(fillTemplate(tpl, map));
+  }catch(err){ setGenStatus("payload JSON is invalid: " + err.message); return; }
+  genSetBusy(true);
+  var label = kind === "video" ? "video" : "still";
+  setGenStatus(label + ": submitting...");
+  falSubmit(ep, payload, key)
+    .then(function(sub){ return falPoll(sub, key, label); })
+    .then(function(result){
+      var media = mediaFromResult(result);
+      if(!media) throw new Error("no media in response: " + JSON.stringify(result).slice(0,200));
+      if(kind === "video" && document.getElementById("up4k").checked){
+        showResult(media);
+        setGenStatus("video done at source res, upscaling to 4K...");
+        var upEp = document.getElementById("epUp").value.trim();
+        var upPayload;
+        try{ upPayload = fillTemplate(document.getElementById("plUp").value, {"{VIDEO}": media.url}); }
+        catch(err){ setGenStatus("done. Upscale payload invalid, showing source res."); return null; }
+        return falSubmit(upEp, upPayload, key)
+          .then(function(sub){ return falPoll(sub, key, "4K upscale"); })
+          .then(function(upResult){
+            var upMedia = mediaFromResult(upResult);
+            if(upMedia){ showResult(upMedia); setGenStatus("done, 4K."); }
+            else setGenStatus("done. Upscale returned no media, showing source res.");
+          })
+          .catch(function(err){
+            setGenStatus("done at source res. Upscale failed: " + err.message);
+          });
+      }
+      showResult(media);
+      setGenStatus("done.");
+      return null;
+    })
+    .catch(function(err){
+      if(err instanceof TypeError){
+        setGenStatus("network error reaching fal. Check your connection and retry.");
+      } else {
+        setGenStatus("error: " + err.message);
+      }
+    })
+    .then(function(){
+      genSetBusy(false);
+    });
+}
+document.getElementById("genStill").addEventListener("click", function(){ runGen("still"); });
+document.getElementById("genVideo").addEventListener("click", function(){ runGen("video"); });
+function runPanoGen(){
+  if(genBusy) return;
+  var key = document.getElementById("falKey").value.trim();
+  if(!key){ showToast("PASTE YOUR FAL KEY FIRST"); return; }
+  var desc = document.getElementById("panoPrompt").value.trim();
+  if(!desc){ showToast("DESCRIBE THE LOCATION FIRST"); return; }
+  var bits = ["Seamless equirectangular 360 degree panorama photograph, 2:1, level horizon at standing eye height", desc];
+  var lp = lookItem(LIGHTS, LOOK.light);
+  var sp = lookItem(STOCKS, LOOK.stock);
+  if(lp.p) bits.push(lp.p);
+  if(sp.p) bits.push(sp.p);
+  var prompt = bits.join(". ") + ". Empty of people, no tripod or camera visible at the nadir.";
+  var payload;
+  try{
+    payload = pruneUnfilled(fillTemplate(document.getElementById("plPano").value, {"{PROMPT}": prompt}));
+  }catch(err){ setGenStatus("360 payload JSON is invalid: " + err.message); return; }
+  genSetBusy(true);
+  setGenStatus("360: submitting...");
+  falSubmit(document.getElementById("epPano").value.trim(), payload, key)
+    .then(function(sub){ return falPoll(sub, key, "360"); })
+    .then(function(result){
+      var media = mediaFromResult(result);
+      if(!media) throw new Error("no media in response: " + JSON.stringify(result).slice(0,200));
+      setGenStatus("360: loading onto the dome...");
+      showResult(media);
+      new THREE.TextureLoader().load(media.url, function(tx){
+        tx.wrapS = THREE.RepeatWrapping;
+        tx.minFilter = THREE.LinearFilter;
+        if(DOME.tex) DOME.tex.dispose();
+        DOME.tex = tx;
+        DOME.builtin = null;
+        buildDome(); buildPrompt();
+        setGenStatus("360 up on the dome.");
+      }, undefined, function(){
+        setGenStatus("generated, but the browser blocked cross-origin loading. Open the link, save the image, then Import 360.");
+      });
+    })
+    .catch(function(err){
+      if(err instanceof TypeError){
+        setGenStatus("network error reaching fal. Check your connection and retry.");
+      } else {
+        setGenStatus("error: " + err.message);
+      }
+    })
+    .then(function(){ genSetBusy(false); });
+}
+document.getElementById("gen360").addEventListener("click", runPanoGen);
+
+/* ==================== transport ==================== */
+var transport = {playing:true, hold:0};
+var lastE = 0;
+var tScrub = document.getElementById("tScrub");
+var tPlayBtn = document.getElementById("tPlay");
+function syncPlayBtn(){
+  tPlayBtn.innerHTML = transport.playing ? "&#10074;&#10074;" : "&#9654;";
+}
+function togglePlay(){
+  transport.playing = !transport.playing;
+  if(transport.playing) prevT = transport.hold * LOOP;
+  syncPlayBtn();
+}
+tPlayBtn.addEventListener("click", togglePlay);
+tScrub.addEventListener("input", function(){
+  transport.playing = false;
+  transport.hold = parseFloat(tScrub.value);
+  syncPlayBtn();
+});
+document.getElementById("tThirds").addEventListener("click", function(){
+  var ui = document.getElementById("monUI");
+  ui.classList.toggle("showthirds");
+  this.classList.toggle("on", ui.classList.contains("showthirds"));
+});
+syncPlayBtn();
+
+/* ==================== shot bin ==================== */
+var bin = [], binSeq = 1, binSel = -1;
+var binRow = document.getElementById("binRow");
+function binThumb(){
+  var mv = (selMove && selMove!=="static" && selMove!=="timelapse") ? selMove : null;
+  applyPoseToCam(mv, lastE, 0);
+  helper.visible = false; rig.visible = false;
+  mon.render(scene, camA);
+  helper.visible = true; rig.visible = true;
+  var tc = document.createElement("canvas");
+  tc.width = 192; tc.height = Math.max(2, Math.round(192/currentAR()));
+  tc.getContext("2d").drawImage(monCanvas, 0, 0, tc.width, tc.height);
+  return tc.toDataURL("image/jpeg", 0.65);
+}
+function renderBin(){
+  binRow.innerHTML = "";
+  bin.forEach(function(s, i){
+    var card = document.createElement("div");
+    card.className = "shot" + (i===binSel ? " on" : "");
+    var img = new Image();
+    img.src = s.thumb; img.alt = s.name;
+    card.appendChild(img);
+    var nm = document.createElement("div");
+    nm.className = "sname";
+    var span = document.createElement("span");
+    span.textContent = s.name;
+    var del = document.createElement("button");
+    del.className = "sdel"; del.innerHTML = "&times;"; del.title = "delete " + s.name;
+    nm.appendChild(span); nm.appendChild(del);
+    card.appendChild(nm);
+    card.addEventListener("click", function(){
+      binSel = i;
+      try{ applyShotData(JSON.parse(JSON.stringify(s.data))); }catch(err){}
+      renderBin();
+      showToast(s.name + " RECALLED");
+    });
+    del.addEventListener("click", function(ev){
+      ev.stopPropagation();
+      bin.splice(i, 1);
+      if(binSel >= bin.length) binSel = bin.length - 1;
+      renderBin();
+    });
+    binRow.appendChild(card);
+  });
+}
+function shotName(){
+  var n = String(binSeq*10);
+  while(n.length < 3) n = "0" + n;
+  binSeq++;
+  return "SH " + n;
+}
+document.getElementById("binAdd").addEventListener("click", function(){
+  bin.push({name:shotName(), data:shotData(), thumb:binThumb()});
+  binSel = bin.length - 1;
+  renderBin();
+  showToast(bin[binSel].name + " BINNED");
+});
+document.getElementById("binUpdate").addEventListener("click", function(){
+  if(binSel < 0 || !bin[binSel]){ showToast("NO SHOT SELECTED"); return; }
+  bin[binSel].data = shotData();
+  bin[binSel].thumb = binThumb();
+  renderBin();
+  showToast(bin[binSel].name + " UPDATED");
+});
+document.getElementById("binSave").addEventListener("click", function(){
+  if(!bin.length){ showToast("BIN IS EMPTY"); return; }
+  dl("backlot-bin.json", JSON.stringify({app:"backlot-bin", version:1, shots:bin}, null, 1), "application/json");
+  showToast("BIN EXPORTED");
+});
+var binInput = document.getElementById("binInput");
+document.getElementById("binLoad").addEventListener("click", function(){ binInput.click(); });
+binInput.addEventListener("change", function(){
+  var file = binInput.files && binInput.files[0];
+  binInput.value = "";
+  if(!file) return;
+  var fr = new FileReader();
+  fr.onload = function(){
+    try{
+      var d = JSON.parse(fr.result);
+      if(!d || d.app!=="backlot-bin" || !d.shots) throw new Error("not a backlot bin file");
+      bin = d.shots;
+      binSeq = bin.length + 1;
+      binSel = -1;
+      renderBin();
+      showToast(bin.length + " SHOTS LOADED");
+    }catch(err){
+      showToast("COULD NOT LOAD: " + (err.message||"unknown").toUpperCase());
+    }
+  };
+  fr.readAsText(file);
+});
+
+/* ==================== coverage generator ==================== */
+function applyCamDef(cdef){
+  setAngle(cdef.angle); setDist(cdef.dist); setHeight(cdef.h); setDutch(0);
+  setAimH(cdef.aimH || 1.4); setPanT(0); setTiltT(0);
+  S.focal = cdef.focal; syncLensUI();
+  if(cdef.lookAt === "group") S.lookAt = "group";
+  else S.lookAt = actors[cdef.lookAt.i]
+    ? (actors[cdef.lookAt.i].id + (cdef.lookAt.face ? ":face" : "")) : "group";
+  refreshLookSelect();
+  selMove = null; prevT = 0;
+  transport.playing = true; transport.hold = 0; syncPlayBtn();
+  syncRec(); buildPrompt();
+}
+function computeCoverageDefs(){
+  var defs = [];
+  var n = actors.length;
+  var cx = 0, cz = 0;
+  actors.forEach(function(a){ cx += a.x; cz += a.z; });
+  cx /= n; cz /= n;
+  var r = 0;
+  actors.forEach(function(a){ r = Math.max(r, Math.hypot(a.x - cx, a.z - cz)); });
+  defs.push({name:"MASTER", angle:S.angle, dist:M.clamp(3.6 + r*2.6, 3.5, 9),
+    h:1.6, focal:(n >= 3 ? 24 : 35), aimH:1.4, lookAt:"group"});
+  var tg = getTarget();
+  var camPos = posAt(M.degToRad(S.angle), S.dist, S.h, tg);
+  function angleFrom(a){
+    return Math.round(M.radToDeg(Math.atan2(camPos.x - a.x, camPos.z - a.z)));
+  }
+  if(n === 2){
+    var A = actors[0], B = actors[1];
+    var dAB = Math.hypot(A.x - B.x, A.z - B.z);
+    function otsAngle(behind, on){
+      return Math.round(M.radToDeg(Math.atan2(behind.x - on.x, behind.z - on.z)));
+    }
+    defs.push({name:"OTS " + actorName(B), angle:otsAngle(A, B), dist:dAB + 0.8,
+      h:1.65, focal:85, lookAt:{i:1, face:true}});
+    defs.push({name:"OTS " + actorName(A), angle:otsAngle(B, A), dist:dAB + 0.8,
+      h:1.65, focal:85, lookAt:{i:0, face:true}});
+  }
+  actors.forEach(function(a, i){
+    defs.push({name:"MED " + actorName(a), angle:angleFrom(a), dist:2.3,
+      h:1.55, focal:50, aimH:1.45, lookAt:{i:i, face:false}});
+    defs.push({name:"CU " + actorName(a), angle:angleFrom(a), dist:1.25,
+      h:1.6, focal:85, lookAt:{i:i, face:true}});
+  });
+  return defs;
+}
+document.getElementById("binCoverage").addEventListener("click", function(){
+  if(!actors.length){ showToast("NO ACTORS TO COVER"); return; }
+  var orig = {angle:S.angle, dist:S.dist, h:S.h, dutch:S.dutch, aimH:S.aimH,
+    panT:S.panT, tiltT:S.tiltT, focal:S.focal, lookAt:S.lookAt, move:selMove};
+  var defs = computeCoverageDefs();
+  var firstIdx = bin.length;
+  defs.forEach(function(def){
+    applyCamDef(def);
+    bin.push({name:def.name, data:shotData(), thumb:binThumb()});
+  });
+  setAngle(orig.angle); setDist(orig.dist); setHeight(orig.h); setDutch(orig.dutch);
+  setAimH(orig.aimH); setPanT(orig.panT); setTiltT(orig.tiltT);
+  S.focal = orig.focal; syncLensUI();
+  S.lookAt = orig.lookAt; refreshLookSelect();
+  selMove = orig.move;
+  syncRec(); renderCards(); buildPrompt();
+  binSel = firstIdx;
+  renderBin();
+  showToast(defs.length + " COVERAGE SETUPS BINNED");
+});
+
+/* ==================== keyboard shortcuts ==================== */
+window.addEventListener("keydown", function(e){
+  var tag = (e.target.tagName || "").toLowerCase();
+  if(tag==="input" || tag==="textarea" || tag==="select" || e.metaKey || e.ctrlKey) return;
+  var k = e.key;
+  if(k === " "){
+    e.preventDefault();
+    togglePlay();
+  } else if(k === "[" || k === "]"){
+    var i = LENSES.indexOf(S.focal);
+    if(i < 0) i = 2;
+    i = M.clamp(i + (k === "]" ? 1 : -1), 0, LENSES.length-1);
+    S.focal = LENSES[i];
+    syncLensUI(); buildPrompt();
+  } else if(k === "e" || k === "E"){
+    exportFrame();
+  } else if(k === "c" || k === "C"){
+    copyText(document.getElementById("promptBox").textContent);
+  } else if(k.indexOf("Arrow") === 0){
+    e.preventDefault();
+    var dx = k==="ArrowLeft" ? -0.1 : k==="ArrowRight" ? 0.1 : 0;
+    var dz = k==="ArrowUp" ? -0.1 : k==="ArrowDown" ? 0.1 : 0;
+    if(e.shiftKey){
+      var p = selectedPiece();
+      if(p){
+        p.x = M.clamp(p.x+dx, -10, 10); p.z = M.clamp(p.z+dz, -10, 10);
+        p.group.position.set(p.x, 0, p.z);
+        syncPieceSliders();
+      }
+    } else {
+      var a = selectedActor();
+      if(a){
+        a.x = M.clamp(a.x+dx, -8, 8); a.z = M.clamp(a.z+dz, -8, 8);
+        a.group.position.set(a.x, 0, a.z);
+        syncActorSliders(); buildPrompt();
+      }
+    }
+  }
+});
+
+/* ==================== resize ==================== */
+function resize(){
+  var w = stage.clientWidth, hgt = stage.clientHeight;
+  renderer.setSize(w, hgt);
+  dirCam.aspect = w/hgt;
+  dirCam.updateProjectionMatrix();
+  var mw = Math.round(document.getElementById("monitor").clientWidth);
+  mon.setSize(mw, Math.round(mw/currentAR()));
+}
+window.addEventListener("resize", resize);
+
+/* ==================== loop ==================== */
+var clock = new THREE.Clock();
+var LOOP = 4.2, HOLD = 0.7;
+var frame = 0;
+function tick(){
+  requestAnimationFrame(tick);
+  frame++;
+  var dt = clock.getDelta(), time = clock.elapsedTime;
+
+  /* actors */
+  actors.forEach(function(a){
+    if(a.custom) a.custom.mixer.update(dt);
+    else poseMannequin(a, time);
+    a.tape.userData.mat.color.setHex(a.id===selActor ? 0x25d0c4 : 0xff6a13);
+  });
+  pieces.forEach(function(p){ p.tape.visible = (p.id===selPiece); });
+
+  /* A cam pose */
+  var focal = S.focal;
+  var moving = selMove && selMove!=="static" && selMove!=="timelapse";
+  var e = 0;
+  if(moving){
+    if(reduced){ e = 0.5; }
+    else if(transport.playing){
+      prevT += dt;
+      var t = prevT % (LOOP + HOLD);
+      e = ease(M.clamp(t/LOOP, 0, 1));
+      transport.hold = M.clamp(t/LOOP, 0, 1);
+      tScrub.value = transport.hold;
+    } else {
+      e = ease(transport.hold);
+    }
+    focal = applyPoseToCam(selMove, e, time);
+  } else {
+    focal = applyPoseToCam(null, 0, time);
+  }
+  lastE = e;
+
+  proxy.position.copy(camA.position);
+  proxy.quaternion.copy(camA.quaternion);
+  proxy.aspect = camA.aspect;
+  proxy.fov = camA.fov;
+  proxy.updateProjectionMatrix();
+  proxy.updateMatrixWorld(true);
+  helper.update();
+
+  document.getElementById("mLens").textContent = Math.round(focal) + "MM";
+  document.getElementById("mData").textContent =
+    "D " + S.dist.toFixed(1) + "M \u00B7 H " + S.h.toFixed(1) + "M \u00B7 " + actors.length + " ACT";
+
+  helper.visible = false; rig.visible = false;
+  mon.render(scene, camA);
+  helper.visible = true; rig.visible = true;
+  renderer.render(scene, dirCam);
+
+  /* animated card previews, every other frame */
+  if(frame % 2 === 0){
+    var te;
+    if(reduced){ te = 0.5; }
+    else{
+      var tt = (time % (LOOP + HOLD));
+      te = ease(M.clamp(tt/LOOP, 0, 1));
+    }
+    for(var i=0;i<thumbs.length;i++) drawThumb(thumbs[i], te, time);
+  }
+}
+
+/* ==================== boot ==================== */
+applySetPreset(SETPRESETS[1]);
+addActor({x:0, z:0, face:170});
+refreshLookSelect();
+renderActorUI();
+renderPieceUI();
+renderCards();
+buildPrompt();
+resize();
+setTimeout(resize, 60);
+tick();
+})();
+</script>
+</body>
+</html>

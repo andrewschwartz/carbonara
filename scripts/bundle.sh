@@ -47,10 +47,9 @@ ZIP="$ROOT/.build/Carbonara.zip"
 DMG="$ROOT/.build/Carbonara.dmg"
 
 echo "==> Building ($CONFIG)"
+# Telemetry disabled for now: Package.swift declares no ProductionTelemetry
+# trait, and Sentry/PostHog stay no-ops unless their env vars are injected.
 TRAITS="BundledSpeech"
-if [ "$CONFIG" = "release" ]; then
-  TRAITS="$TRAITS,ProductionTelemetry"
-fi
 BUILD_ARGS=(-c "$CONFIG" --traits "$TRAITS")
 swift build "${BUILD_ARGS[@]}"
 BIN="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)/Carbonara"

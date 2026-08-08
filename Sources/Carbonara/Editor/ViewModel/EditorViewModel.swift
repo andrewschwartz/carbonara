@@ -70,6 +70,8 @@ final class EditorViewModel {
     var speechAnalyzingCount: Int = 0
     var speakerRegistry: [SpeakerRegistryEntry] = []
     var multicamGroups: [MulticamSource] = []
+    /// Project-owned Backlot previs scenes; the web bin is a live projection of these.
+    var backlotScenes: [BacklotScene] = []
     var speakerAssignments: [String: [String: Int]] = [:]
     var speakerIdentifyPhase: String?
     var speakerIdentifyInFlight: Bool { speakerIdentifyPhase != nil }

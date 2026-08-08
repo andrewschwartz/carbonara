@@ -8,6 +8,8 @@ struct ProjectFile: Codable, Sendable {
     var viewStates: [String: TimelineViewState]?
     var speakers: [SpeakerRegistryEntry]?
     var multicamGroups: [MulticamSource]?
+    /// Backlot previs scenes, project-owned so the web bin can be rehydrated across sessions.
+    var backlotScenes: [BacklotScene]?
 
     static func decode(_ data: Data) throws -> ProjectFile {
         let decoder = JSONDecoder()

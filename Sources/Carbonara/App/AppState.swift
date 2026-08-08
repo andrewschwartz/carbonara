@@ -106,6 +106,7 @@ final class AppState {
             activeProject = project
             project.editorViewModel.refreshProjectId()
             recordProjectActive(project)
+            BacklotWindowController.shared.hydrate(from: project.editorViewModel)
         }
         HomeWindowController.shared.window?.orderOut(nil)
     }
@@ -121,6 +122,7 @@ final class AppState {
             if let next = openProjects.first {
                 showEditor(for: next)
             } else {
+                BacklotWindowController.shared.hydrate(from: nil)
                 HomeWindowController.shared.showWindow(nil)
             }
         }

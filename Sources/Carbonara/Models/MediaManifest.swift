@@ -33,6 +33,8 @@ struct MediaManifestEntry: Codable, Sendable, Equatable, Identifiable {
     var cachedRemoteURLExpiresAt: Date?
     var generationStatus: String?
     var importInput: MediaImportInput?
+    /// Backlot scene this asset was baked/generated from, if any.
+    var backlotSceneId: String? = nil
 }
 
 struct MediaImportInput: Codable, Sendable, Equatable {

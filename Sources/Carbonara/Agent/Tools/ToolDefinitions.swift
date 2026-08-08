@@ -65,6 +65,12 @@ enum ToolName: String, CaseIterable, Sendable {
     case generateAudio = "generate_audio"
     case upscaleMedia = "upscale_media"
 
+    // Backlot previs
+    case getBacklot = "get_backlot"
+    case setBacklotScenes = "set_backlot_scenes"
+    case buildAnimatic = "build_animatic"
+    case generatePhotoreal = "generate_photoreal"
+
     // Meta
     case readSkill = "read_skill"
 }
@@ -1012,6 +1018,105 @@ enum ToolDefinitions {
                 ],
                 required: ["mediaRef"]
             )
+        ),
+        AgentTool(
+            name: .getBacklot,
+            description: "Read Backlot, Carbonara's 3D previs shot builder — opens its window if needed. Backlot holds a bin of scenes (previs shots): each scene stages greybox set pieces, mannequin actors, a virtual camera, a camera move, and a photographic look. Call this before set_backlot_scenes: it returns the current scenes (stable sceneId, bin order, name, per-scene summary) plus the exact vocabulary the setter accepts — set presets, blocking presets, camera move ids, lens kits, film stocks, lighting, look styles, apertures, actor animations, and greybox piece types. Backlot scenes persist with the project, separate from its timelines and media; build_animatic bakes them onto a timeline.",
+            inputSchema: objectSchema()
+        ),
+        AgentTool(
+            name: .setBacklotScenes,
+            description: "Create, update, remove, or reorder scenes in Backlot's shot bin. Use it to set up previs scenes that match a script or shot list: one operation per scene, in script order, named after the scene heading or shot (e.g. 'INT. CAFE — DAY' or 'SC 4 — OTS'). Call get_backlot first for existing sceneIds and the accepted preset names and ids.\n\nEvery operation is validated before anything is applied; on any error the bin is left untouched. An add starts from an empty stage with a single standing actor, then applies blocking, set, actors, camera, look, and move in that order — so 'blocking' + 'set' alone yields a complete staged scene, and explicit actors/pieces/camera refine it. An update loads the existing scene and applies only the fields you pass. Numeric camera values outside the stage's supported ranges are clamped to them. The Backlot stage and window show the last touched scene, and each scene gets a fresh thumbnail.\n\nReturns a receipt with per-operation changes and the resulting bin order. Backlot scenes persist with the project, but this tool is NOT undoable with the undo tool. To bring scenes into the project as editable clips, call build_animatic; the user can also export reference frames or generate media from Backlot.",
+            inputSchema: objectSchema(
+                properties: [
+                    "scenes": [
+                        "type": "array",
+                        "description": "Operations applied in order after all of them validate.",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "action": ["type": "string", "enum": ["add", "update", "remove", "move"], "description": "Default add. update/remove/move require sceneId from get_backlot (or a receipt)."],
+                                "sceneId": ["type": "string", "description": "Target scene for update/remove/move."],
+                                "toIndex": ["type": "integer", "description": "move only. Destination bin index; past the end places the scene last."],
+                                "name": ["type": "string", "description": "Scene label shown in the bin, e.g. the script scene heading. Defaults to the next 'SH NNN'."],
+                                "blocking": ["type": "string", "description": "Blocking preset name from get_backlot (e.g. 'Two-shot', 'Walk & talk'). Places actors and a matching camera."],
+                                "set": ["type": "string", "description": "Set preset name from get_backlot (e.g. 'Cafe', 'Alley'). Replaces all greybox pieces."],
+                                "actors": [
+                                    "type": "array",
+                                    "description": "Replaces all actors (1-6). Positions in meters on the stage floor; -z is upstage (away from the default camera).",
+                                    "items": [
+                                        "type": "object",
+                                        "properties": [
+                                            "x": ["type": "number", "description": "Stage x in meters."],
+                                            "z": ["type": "number", "description": "Stage z in meters."],
+                                            "face": ["type": "number", "description": "Facing in degrees; 0 faces the default camera direction."],
+                                            "anim": ["type": "string", "description": "Animation id from get_backlot actorAnimations (idle, walk, run, talk, point, sit, crouch)."],
+                                        ],
+                                    ],
+                                ],
+                                "pieces": [
+                                    "type": "array",
+                                    "description": "Replaces all greybox set pieces. Use for a custom set instead of (or after) a 'set' preset.",
+                                    "items": [
+                                        "type": "object",
+                                        "properties": [
+                                            "type": ["type": "string", "description": "Piece type id from get_backlot pieceTypes (wall, doorway, window, box, column, table, counter, stairs, car, tree)."],
+                                            "x": ["type": "number", "description": "Stage x in meters."],
+                                            "z": ["type": "number", "description": "Stage z in meters."],
+                                            "rotation": ["type": "number", "description": "Rotation in degrees."],
+                                            "scale": ["type": "number", "description": "Uniform scale, 1 = life size."],
+                                        ],
+                                        "required": ["type"],
+                                    ],
+                                ],
+                                "camera": [
+                                    "type": "object",
+                                    "description": "Virtual camera overrides, applied after any blocking preset.",
+                                    "properties": [
+                                        "angle": ["type": "number", "description": "Orbit angle around the subject in degrees."],
+                                        "distance": ["type": "number", "description": "Distance from the subject in meters."],
+                                        "height": ["type": "number", "description": "Camera height in meters (1.6 is eye level)."],
+                                        "focal": ["type": "number", "description": "Focal length in mm (18-135 typical; 24 wide, 50 normal, 85 portrait)."],
+                                        "dutch": ["type": "number", "description": "Dutch tilt in degrees."],
+                                        "aimHeight": ["type": "number", "description": "Height the lens aims at, in meters."],
+                                        "lookAt": ["description": "'group' to frame everyone, or an actor index (0-based) to frame one actor."],
+                                        "lookAtFace": ["type": "boolean", "description": "With an actor-index lookAt: aim at the face instead of the body."],
+                                    ],
+                                ],
+                                "look": [
+                                    "type": "object",
+                                    "description": "Photographic look; ids from get_backlot.",
+                                    "properties": [
+                                        "kit": ["type": "string", "description": "Lens kit id (modern, vintage, anamorphic, diffusion, doczoom). Anamorphic switches to 21:9."],
+                                        "stock": ["type": "string", "description": "Film stock id."],
+                                        "light": ["type": "string", "description": "Lighting id."],
+                                        "style": ["type": "string", "description": "Look style id."],
+                                        "aperture": ["type": "string", "description": "Aperture id (auto, t13, t2, t28, t4, t8)."],
+                                        "notes": ["type": "string", "description": "Free-form art-direction notes folded into the scene's prompt."],
+                                    ],
+                                ],
+                                "move": ["type": "string", "description": "Camera move id from get_backlot moves (e.g. dollyIn, orbitCW, handheld). Omit for a static hold."],
+                            ],
+                        ],
+                    ],
+                ],
+                required: ["scenes"]
+            )
+        ),
+        AgentTool(
+            name: .buildAnimatic,
+            description: "Bake every Backlot scene into greybox previs media and lay it out as an animatic on a dedicated 'Animatic' timeline, in bin order, as one undoable action. Each scene renders from Backlot's virtual camera: a static shot bakes to a still image, a scene with a camera move bakes to a short video of that move. The clips are imported as project media tagged with their sceneId and placed back to back on a fresh video track. Use this to turn a previs bin built with set_backlot_scenes into an editable rough cut the user can rearrange, retime, and later replace with generated footage. Call get_backlot first to confirm the bin has scenes. Rebuilds the 'Animatic' timeline from scratch each call rather than appending, so it always mirrors the current bin; other timelines are untouched. Returns a receipt with the timeline id, each scene's placed clip id in order, and any scenes that couldn't be baked.",
+            inputSchema: objectSchema()
+        ),
+        AgentTool(
+            name: .generatePhotoreal,
+            description: "Upgrade every Backlot scene into a photoreal shot with Seedance 2.5, conditioning each generation on that scene's greybox previs and its composed look prompt. Coverage angles derive from one master setup, so the greyboxes already share blocking; each shot generates independently and all submissions start concurrently. A still greybox conditions the generation as its first frame; a scene with a camera move conditions it as a motion reference. Reuses greyboxes already baked (e.g. by build_animatic) and bakes only the scenes still missing one. Generation is asynchronous and costs real money: this returns immediately with a placeholder asset id per scene, each tagged with its sceneId, and the assets become usable once ready — poll get_media with pending=true. The photoreal assets land in the media library but are NOT placed on a timeline; use add_clips to cut them in. Requires a paid plan and credits. Call get_backlot first to confirm the bin has scenes.",
+            inputSchema: objectSchema(properties: [
+                "durationSeconds": [
+                    "type": "integer",
+                    "description": "Seconds per generated shot. Clamped to the model's supported range (Seedance 2.5: 4–30). Defaults to 5.",
+                ],
+            ])
         ),
     ]
 

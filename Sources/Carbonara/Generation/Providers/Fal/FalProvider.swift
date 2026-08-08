@@ -21,18 +21,19 @@ struct FalProvider: GenerationProvider {
 
     func submit(model: String, params: BackendGenerationParams, projectId: String?) async throws -> String {
         guard let key = FalKeyStore.load() else { throw FalError.missingKey }
-        guard let url = URL(string: "\(Self.queueBase)/\(model)") else { throw FalError.badModel(model) }
+        let endpoint = FalRequestBuilder.endpoint(model: model, params: params)
+        guard let url = URL(string: "\(Self.queueBase)/\(endpoint)") else { throw FalError.badModel(endpoint) }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Key \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try FalRequestBuilder.inputJSON(model: model, params: params)
+        request.httpBody = try FalRequestBuilder.inputJSON(model: endpoint, params: params)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try Self.assertOK(response, data)
         let submitted = try JSONDecoder().decode(FalSubmitResponse.self, from: data)
-        return "\(model)\(Self.jobSeparator)\(submitted.requestId)"
+        return "\(endpoint)\(Self.jobSeparator)\(submitted.requestId)"
     }
 
     func updates(forJob jobId: String) -> AsyncStream<GenerationJobUpdate> {

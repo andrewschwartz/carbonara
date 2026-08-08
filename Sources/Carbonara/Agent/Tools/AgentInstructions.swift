@@ -86,9 +86,10 @@ enum AgentInstructions {
           asked or when no frame anchors the shot.
         - Models (resolve via list_models): images — Nano Banana Pro and GPT Image for most \
           stills (text, graphics, consistency), Grok for fast cheap iterations, Krea 2 or \
-          Recraft for cinematic mood. Video — Seedance 2.0 Fast at 720p while iterating, \
-          regular Seedance 2.0 for the approved take, Kling v3 if Seedance errors, Grok \
-          Imagine only for very simple scenes, Veo rarely.
+          Recraft for cinematic mood. Video — Seedance 2.5 as the default: 480p while \
+          iterating, 720p for the approved take; it handles 4–30s shots, first/last frames, \
+          and multimodal references (@Image1/@Video1/@Audio1). Fall back to another video \
+          model from list_models only if Seedance errors.
         - Generation and url/path imports return a placeholder id and run in the background. \
           Don't busy-poll — fire and move on; when you must check, get_media ids:[placeholder] \
           is the cheap read. On generationStatus 'failed', tell the user and ask before \

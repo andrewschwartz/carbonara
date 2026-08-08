@@ -24,6 +24,8 @@ final class MediaAsset: Identifiable {
     var hasAudio: Bool = false
     var generationInput: GenerationInput?
     var importInput: MediaImportInput?
+    /// Backlot scene this asset was baked/generated from, if any.
+    var backlotSceneId: String?
     var generationStatus: GenerationStatus = .none
     var folderId: String?
     var pendingDownloadURL: URL?
@@ -126,6 +128,7 @@ final class MediaAsset: Identifiable {
         self.cachedRemoteURL = entry.cachedRemoteURL
         self.cachedRemoteURLExpiresAt = entry.cachedRemoteURLExpiresAt
         self.importInput = entry.importInput
+        self.backlotSceneId = entry.backlotSceneId
         let restoredStatus = GenerationStatus(serialized: entry.generationStatus)
         self.generationStatus = restoredStatus == .preparing && !canResumeGeneration ? .none : restoredStatus
     }
@@ -149,6 +152,7 @@ final class MediaAsset: Identifiable {
             cachedRemoteURLExpiresAt: fresh == nil ? nil : cachedRemoteURLExpiresAt,
             generationStatus: generationStatus.manifestValue,
             importInput: importInput,
+            backlotSceneId: backlotSceneId
         )
     }
 

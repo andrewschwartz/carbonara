@@ -258,6 +258,10 @@
         <button class="btn btn-primary" id="binCoverage">Coverage</button>
       </div>
       <div class="actions">
+        <button class="btn btn-primary" id="binAnimatic">Build animatic</button>
+        <button class="btn btn-primary" id="binPhotoreal">Generate photoreal</button>
+      </div>
+      <div class="actions">
         <button class="btn btn-ghost" id="binSave">Export bin</button>
         <button class="btn btn-ghost" id="binLoad">Import bin</button>
       </div>
@@ -2770,6 +2774,7 @@ function renderBin(){
       bin.splice(i, 1);
       if(binSel >= bin.length) binSel = bin.length - 1;
       renderBin();
+      backlotNotifyScenesChanged();
     });
     binRow.appendChild(card);
   });
@@ -2781,18 +2786,42 @@ function shotName(){
   return "SH " + n;
 }
 document.getElementById("binAdd").addEventListener("click", function(){
-  bin.push({name:shotName(), data:shotData(), thumb:binThumb()});
+  var s = {name:shotName(), data:shotData(), thumb:binThumb(), prompt:composePrompt(true)};
+  agentEnsureSceneId(s);
+  bin.push(s);
   binSel = bin.length - 1;
   renderBin();
+  backlotNotifyScenesChanged();
   showToast(bin[binSel].name + " BINNED");
 });
 document.getElementById("binUpdate").addEventListener("click", function(){
   if(binSel < 0 || !bin[binSel]){ showToast("NO SHOT SELECTED"); return; }
   bin[binSel].data = shotData();
   bin[binSel].thumb = binThumb();
+  bin[binSel].prompt = composePrompt(true);
   renderBin();
+  backlotNotifyScenesChanged();
   showToast(bin[binSel].name + " UPDATED");
 });
+(function(){
+  var animaticBtn = document.getElementById("binAnimatic");
+  var photorealBtn = document.getElementById("binPhotoreal");
+  if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.carbonara)){
+    animaticBtn.style.display = "none";
+    photorealBtn.style.display = "none";
+    return;
+  }
+  animaticBtn.addEventListener("click", function(){
+    if(!bin.length){ showToast("BIN IS EMPTY"); return; }
+    try{ window.webkit.messageHandlers.carbonara.postMessage({kind:"buildAnimatic"}); }catch(err){}
+    showToast("BUILDING ANIMATIC");
+  });
+  photorealBtn.addEventListener("click", function(){
+    if(!bin.length){ showToast("BIN IS EMPTY"); return; }
+    try{ window.webkit.messageHandlers.carbonara.postMessage({kind:"generatePhotoreal"}); }catch(err){}
+    showToast("GENERATING PHOTOREAL");
+  });
+})();
 document.getElementById("binSave").addEventListener("click", function(){
   if(!bin.length){ showToast("BIN IS EMPTY"); return; }
   dl("backlot-bin.json", JSON.stringify({app:"backlot-bin", version:1, shots:bin}, null, 1), "application/json");
@@ -2810,9 +2839,11 @@ binInput.addEventListener("change", function(){
       var d = JSON.parse(fr.result);
       if(!d || d.app!=="backlot-bin" || !d.shots) throw new Error("not a backlot bin file");
       bin = d.shots;
+      bin.forEach(agentEnsureSceneId);
       binSeq = bin.length + 1;
       binSel = -1;
       renderBin();
+      backlotNotifyScenesChanged();
       showToast(bin.length + " SHOTS LOADED");
     }catch(err){
       showToast("COULD NOT LOAD: " + (err.message||"unknown").toUpperCase());
@@ -2820,6 +2851,366 @@ binInput.addEventListener("change", function(){
   };
   fr.readAsText(file);
 });
+
+/* ==================== agent control (Carbonara) ==================== */
+/* JSON-string API driven by Carbonara's MCP tools via evaluateJavaScript. */
+var agentSceneSeq = 1;
+function agentEnsureSceneId(s){
+  if(!s.id) s.id = "sc" + (agentSceneSeq++) + "-" + Math.random().toString(36).slice(2, 8);
+  return s.id;
+}
+function agentIdName(x){ return {id:x.id, name:x.n}; }
+function agentFindPreset(list, name){
+  return list.find(function(p){ return p.n.toLowerCase() === String(name).toLowerCase(); });
+}
+function agentSceneSummary(d){
+  d = d || {};
+  var c = d.camera || {};
+  var out = {
+    actorCount: (d.actors||[]).length,
+    pieceCount: (d.pieces||[]).length,
+    camera: {angle:c.angle||0, distance:c.dist||0, height:c.h||0, focal:c.focal||35}
+  };
+  if(c.dutch) out.camera.dutch = c.dutch;
+  if(d.move) out.move = d.move;
+  var lk = d.look || {};
+  var look = {};
+  if(lk.kit && lk.kit !== "modern") look.kit = lk.kit;
+  if(lk.stock && lk.stock !== "digital") look.stock = lk.stock;
+  if(lk.light && lk.light !== "none") look.light = lk.light;
+  if(lk.style && lk.style !== "none") look.style = lk.style;
+  if(lk.ap && lk.ap !== "auto") look.aperture = lk.ap;
+  if(lk.notes) look.notes = lk.notes;
+  if(Object.keys(look).length) out.look = look;
+  return out;
+}
+function agentGetState(){
+  bin.forEach(agentEnsureSceneId);
+  return JSON.stringify({
+    scenes: bin.map(function(s, i){
+      var e = {sceneId:s.id, index:i, name:s.name};
+      var sum = agentSceneSummary(s.data);
+      for(var k in sum) e[k] = sum[k];
+      return e;
+    }),
+    selectedSceneId: (binSel >= 0 && bin[binSel]) ? bin[binSel].id : null,
+    presets: {
+      sets: SETPRESETS.map(function(p){ return p.n; }),
+      blocking: PRESETS.map(function(p){ return p.n; }),
+      moves: MOVES.map(function(m){ return {id:m.id, name:m.n, category:m.c}; }),
+      lensKits: LENSKITS.map(agentIdName),
+      filmStocks: STOCKS.map(agentIdName),
+      lighting: LIGHTS.map(agentIdName),
+      styles: LOOKSTYLES.map(agentIdName),
+      apertures: APERTURES.map(agentIdName),
+      actorAnimations: ANIMS.map(function(a){ return a.id; }),
+      pieceTypes: PIECE_TYPES.map(function(p){ return p.id; }),
+      maxActors: 6
+    }
+  });
+}
+function agentValidateSpec(spec, path, errors){
+  if(spec.set !== undefined && !agentFindPreset(SETPRESETS, spec.set))
+    errors.push(path + ": unknown set '" + spec.set + "'");
+  if(spec.blocking !== undefined && !agentFindPreset(PRESETS, spec.blocking))
+    errors.push(path + ": unknown blocking '" + spec.blocking + "'");
+  if(spec.move !== undefined && spec.move !== null && !moveById[spec.move])
+    errors.push(path + ": unknown move '" + spec.move + "'");
+  if(spec.actors !== undefined){
+    if(!Array.isArray(spec.actors) || spec.actors.length < 1 || spec.actors.length > 6){
+      errors.push(path + ": actors must be an array of 1-6 entries");
+    } else {
+      spec.actors.forEach(function(a, i){
+        if(a.anim !== undefined && !ANIMS.some(function(x){ return x.id === a.anim; }))
+          errors.push(path + ".actors[" + i + "]: unknown anim '" + a.anim + "'");
+      });
+    }
+  }
+  if(spec.pieces !== undefined){
+    if(!Array.isArray(spec.pieces)){
+      errors.push(path + ": pieces must be an array");
+    } else {
+      spec.pieces.forEach(function(p, i){
+        if(!PIECE_TYPES.some(function(x){ return x.id === p.type; }))
+          errors.push(path + ".pieces[" + i + "]: unknown piece type '" + (p && p.type) + "'");
+      });
+    }
+  }
+  if(spec.look){
+    [["kit",LENSKITS],["stock",STOCKS],["light",LIGHTS],["style",LOOKSTYLES],["aperture",APERTURES]]
+      .forEach(function(pair){
+        var v = spec.look[pair[0]];
+        if(v !== undefined && !pair[1].some(function(x){ return x.id === v; }))
+          errors.push(path + ".look: unknown " + pair[0] + " '" + v + "'");
+      });
+  }
+  if(spec.camera && spec.camera.lookAt !== undefined && spec.camera.lookAt !== "group" &&
+     (typeof spec.camera.lookAt !== "number" || spec.camera.lookAt < 0))
+    errors.push(path + ".camera.lookAt: must be 'group' or an actor index");
+}
+function agentClampTo(id, v){
+  var r = document.getElementById(id);
+  return M.clamp(v, parseFloat(r.min), parseFloat(r.max));
+}
+function agentBaseline(){
+  camKeys = []; renderKeyChips();
+  applyBlocking(PRESETS[0]);
+  applySetPreset(SETPRESETS[0]);
+  LOOK.kit = "modern"; LOOK.stock = "digital"; LOOK.light = "none";
+  LOOK.style = "none"; LOOK.ap = "auto"; LOOK.notes = "";
+  syncLookUI();
+  setPanT(0); setTiltT(0);
+}
+function agentApplySpec(spec){
+  if(spec.blocking !== undefined) applyBlocking(agentFindPreset(PRESETS, spec.blocking));
+  if(spec.set !== undefined) applySetPreset(agentFindPreset(SETPRESETS, spec.set));
+  if(spec.pieces !== undefined){
+    while(pieces.length) removePieceById(pieces[0].id);
+    spec.pieces.forEach(function(p){
+      addPiece({type:p.type, x:p.x, z:p.z, rot:p.rotation, scale:p.scale});
+    });
+    selPiece = pieces.length ? pieces[0].id : null;
+  }
+  if(spec.actors !== undefined){
+    while(actors.length) removeActorById(actors[0].id, true);
+    spec.actors.slice(0, 6).forEach(function(a){
+      addActor({x:a.x, z:a.z, face:a.face, anim:a.anim});
+    });
+    if(!actors.length) addActor({});
+    selActor = actors[0].id;
+  }
+  var c = spec.camera;
+  if(c){
+    if(c.angle !== undefined) setAngle(agentClampTo("rAngle", c.angle));
+    if(c.distance !== undefined) setDist(agentClampTo("rDist", c.distance));
+    if(c.height !== undefined) setHeight(agentClampTo("rHeight", c.height));
+    if(c.dutch !== undefined) setDutch(agentClampTo("rDutch", c.dutch));
+    if(c.aimHeight !== undefined) setAimH(agentClampTo("rAimH", c.aimHeight));
+    if(c.focal !== undefined){ S.focal = M.clamp(c.focal, 10, 250); syncLensUI(); }
+    if(c.lookAt !== undefined){
+      if(typeof c.lookAt === "number" && actors[c.lookAt])
+        S.lookAt = actors[c.lookAt].id + (c.lookAtFace ? ":face" : "");
+      else S.lookAt = "group";
+    }
+  }
+  if(spec.look){
+    var lk = spec.look;
+    if(lk.kit !== undefined) LOOK.kit = lk.kit;
+    if(lk.stock !== undefined) LOOK.stock = lk.stock;
+    if(lk.light !== undefined) LOOK.light = lk.light;
+    if(lk.style !== undefined) LOOK.style = lk.style;
+    if(lk.aperture !== undefined) LOOK.ap = lk.aperture;
+    if(lk.notes !== undefined) LOOK.notes = String(lk.notes);
+    syncLookUI();
+  }
+  if(spec.move !== undefined){
+    selMove = spec.move || null; prevT = 0;
+    if(selMove === "keyed" && camKeys.length < 2) selMove = null;
+  }
+  renderPieceUI(); applySetVisibility();
+  refreshLookSelect(); renderActorUI(); renderCards(); buildPrompt(); syncRec();
+}
+function agentSetScenes(payload){
+  try{
+    var ops = payload && payload.scenes;
+    if(!Array.isArray(ops) || !ops.length)
+      return JSON.stringify({ok:false, error:"scenes must be a non-empty array"});
+    bin.forEach(agentEnsureSceneId);
+    var byId = {};
+    bin.forEach(function(s){ byId[s.id] = s; });
+    var errors = [], removedIds = {};
+    ops.forEach(function(op, i){
+      var path = "scenes[" + i + "]";
+      if(!op || typeof op !== "object"){ errors.push(path + ": must be an object"); return; }
+      var action = op.action || "add";
+      if(["add","update","remove","move"].indexOf(action) < 0){
+        errors.push(path + ": unknown action '" + action + "'"); return;
+      }
+      if(action !== "add"){
+        if(!op.sceneId || !byId[op.sceneId])
+          errors.push(path + ": unknown sceneId '" + (op.sceneId || "") + "'");
+        else if(removedIds[op.sceneId])
+          errors.push(path + ": sceneId '" + op.sceneId + "' is removed by an earlier operation");
+      }
+      if(action === "remove") removedIds[op.sceneId] = true;
+      if(action === "move" && (typeof op.toIndex !== "number" || op.toIndex < 0))
+        errors.push(path + ": move requires toIndex >= 0");
+      if(action === "add" || action === "update") agentValidateSpec(op, path, errors);
+    });
+    if(errors.length) return JSON.stringify({ok:false, error:errors.join("; ")});
+    var changes = [];
+    ops.forEach(function(op){
+      var action = op.action || "add", s, idx;
+      if(action === "remove"){
+        idx = bin.findIndex(function(x){ return x.id === op.sceneId; });
+        changes.push({sceneId:op.sceneId, name:bin[idx].name, action:"removed"});
+        bin.splice(idx, 1);
+        return;
+      }
+      if(action === "move"){
+        idx = bin.findIndex(function(x){ return x.id === op.sceneId; });
+        s = bin.splice(idx, 1)[0];
+        bin.splice(Math.min(op.toIndex, bin.length), 0, s);
+        changes.push({sceneId:s.id, name:s.name, action:"moved", index:bin.indexOf(s)});
+        return;
+      }
+      if(action === "update"){
+        s = byId[op.sceneId];
+        applyShotData(JSON.parse(JSON.stringify(s.data)));
+        agentApplySpec(op);
+        if(op.name !== undefined) s.name = String(op.name);
+        s.data = shotData(); s.thumb = binThumb(); s.prompt = composePrompt(true);
+        binSel = bin.indexOf(s);
+        changes.push({sceneId:s.id, name:s.name, action:"updated"});
+        return;
+      }
+      agentBaseline();
+      agentApplySpec(op);
+      s = {name: op.name !== undefined ? String(op.name) : shotName(),
+        data:shotData(), thumb:binThumb(), prompt:composePrompt(true)};
+      agentEnsureSceneId(s);
+      byId[s.id] = s;
+      bin.push(s);
+      binSel = bin.length - 1;
+      changes.push({sceneId:s.id, name:s.name, action:"added"});
+    });
+    if(binSel >= bin.length) binSel = bin.length - 1;
+    renderBin();
+    backlotNotifyScenesChanged();
+    showToast("SCENES UPDATED");
+    return JSON.stringify({
+      ok: true,
+      changes: changes,
+      scenes: bin.map(function(x, i){ return {sceneId:x.id, index:i, name:x.name}; })
+    });
+  }catch(err){
+    return JSON.stringify({ok:false, error:String((err && err.message) || err)});
+  }
+}
+/* Full data for one scene: shotData JSON + composed prompt. */
+function agentGetScene(id){
+  var s = bin.find(function(x){ return x.id === id; });
+  if(!s) return JSON.stringify({ok:false, error:"unknown sceneId '" + id + "'"});
+  return JSON.stringify({
+    ok: true,
+    sceneId: s.id, name: s.name, index: bin.indexOf(s),
+    shotData: JSON.stringify(s.data),
+    composedPrompt: s.prompt || ""
+  });
+}
+/* The whole bin as the project's persistable scene store (no thumbnails). */
+function agentDumpScenes(){
+  bin.forEach(agentEnsureSceneId);
+  return JSON.stringify({
+    scenes: bin.map(function(s){
+      return {id:s.id, name:s.name, shotData:JSON.stringify(s.data), composedPrompt:s.prompt || ""};
+    })
+  });
+}
+/* Rebuild the bin from a persisted store; thumbnails are regenerated. */
+function agentHydrate(payload){
+  try{
+    var scenes = (payload && payload.scenes) || [];
+    var maxSeq = 1;
+    bin = scenes.map(function(sc){
+      var data = JSON.parse(sc.shotData);
+      var thumb = "";
+      try{ applyShotData(JSON.parse(JSON.stringify(data))); thumb = binThumb(); }catch(err){}
+      var m = /(\d+)/.exec(sc.name || "");
+      if(m){ var n = parseInt(m[1], 10); if(n/10 + 1 > maxSeq) maxSeq = Math.floor(n/10) + 1; }
+      return {id:sc.id, name:sc.name, data:data, thumb:thumb, prompt:sc.composedPrompt || ""};
+    });
+    binSeq = maxSeq;
+    binSel = bin.length ? 0 : -1;
+    if(bin.length){ try{ applyShotData(JSON.parse(JSON.stringify(bin[0].data))); }catch(err){} }
+    renderBin();
+    return JSON.stringify({ok:true, count:bin.length});
+  }catch(err){
+    return JSON.stringify({ok:false, error:String((err && err.message) || err)});
+  }
+}
+/* Drive-on: focus a scene in the bin and load it onto the stage for editing. */
+function agentFocusScene(id){
+  var s = bin.find(function(x){ return x.id === id; });
+  if(!s) return JSON.stringify({ok:false, error:"unknown sceneId '" + id + "'"});
+  binSel = bin.indexOf(s);
+  try{ applyShotData(JSON.parse(JSON.stringify(s.data))); }catch(err){
+    return JSON.stringify({ok:false, error:String(err && err.message || err)});
+  }
+  renderBin();
+  showToast(s.name + " RECALLED");
+  return JSON.stringify({ok:true, sceneId:s.id, name:s.name});
+}
+/* Posts the full store to Carbonara so it persists with the project. */
+function backlotNotifyScenesChanged(){
+  if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.carbonara)) return;
+  try{ window.webkit.messageHandlers.carbonara.postMessage({kind:"scenesChanged", store:agentDumpScenes()}); }catch(err){}
+}
+/* ==================== animatic bake (Carbonara) ====================
+   Deterministic greybox capture driven from Swift, one frame per call so a
+   long move never returns a huge string. Session: begin -> (prepare, frame*)*
+   -> end. The rAF loop keeps running between calls; each frame re-applies the
+   exact pose synchronously before reading the canvas, so the loop can't race it. */
+var bakeState = null;
+function bakeIsMoving(m){ return !!(m && m !== "static" && m !== "timelapse"); }
+/* Snapshots the live stage + monitor size so bake can restore it afterward. */
+function agentBakeBegin(){
+  try{
+    bakeState = {snapshot: shotData(), monW: monCanvas.width, monH: monCanvas.height,
+      moving:false, frameCount:1};
+    return JSON.stringify({ok:true});
+  }catch(err){ return JSON.stringify({ok:false, error:String(err && err.message || err)}); }
+}
+/* Loads a scene and sizes the monitor to the bake height (width follows AR). */
+function agentBakePrepare(id, opts){
+  if(!bakeState) return JSON.stringify({ok:false, error:"bake session not started"});
+  var s = bin.find(function(x){ return x.id === id; });
+  if(!s) return JSON.stringify({ok:false, error:"unknown sceneId '" + id + "'"});
+  try{
+    opts = opts || {};
+    var h = Math.max(16, Math.round(opts.height || 720));
+    var w = Math.round(h * currentAR());
+    applyShotData(JSON.parse(JSON.stringify(s.data)));
+    transport.playing = false;
+    mon.setSize(w, h);
+    camA.aspect = currentAR(); camA.updateProjectionMatrix();
+    var moving = bakeIsMoving(selMove);
+    var fps = Math.max(1, Math.round(opts.fps || 30));
+    var frameCount = moving ? Math.max(2, Math.round(LOOP * fps)) : 1;
+    bakeState.moving = moving; bakeState.frameCount = frameCount;
+    return JSON.stringify({ok:true, sceneId:s.id, name:s.name, isStill:!moving,
+      frameCount:frameCount, width:w, height:h, fps:fps, move:selMove || null});
+  }catch(err){ return JSON.stringify({ok:false, error:String(err && err.message || err)}); }
+}
+/* Renders frame i (t = i/(frameCount-1)) and returns a PNG data URL. */
+function agentBakeFrame(i){
+  if(!bakeState) return JSON.stringify({ok:false, error:"bake session not started"});
+  try{
+    var n = bakeState.frameCount;
+    var t = (n > 1) ? (i / (n - 1)) : 0;
+    var e = bakeState.moving ? ease(M.clamp(t, 0, 1)) : 0;
+    applyPoseToCam(bakeState.moving ? selMove : null, e, 0);
+    helper.visible = false; rig.visible = false;
+    mon.render(scene, camA);
+    helper.visible = true; rig.visible = true;
+    return JSON.stringify({ok:true, index:i, dataURL: monCanvas.toDataURL("image/png")});
+  }catch(err){ return JSON.stringify({ok:false, error:String(err && err.message || err)}); }
+}
+/* Restores the live stage and monitor size; ends the bake session. */
+function agentBakeEnd(){
+  if(!bakeState) return JSON.stringify({ok:true});
+  try{
+    var snap = bakeState.snapshot;
+    bakeState = null;
+    if(snap){ try{ applyShotData(JSON.parse(JSON.stringify(snap))); }catch(err){} }
+    resize();
+    renderBin();
+    return JSON.stringify({ok:true});
+  }catch(err){ bakeState = null; return JSON.stringify({ok:false, error:String(err && err.message || err)}); }
+}
+window.backlotAgent = {getState: agentGetState, setScenes: agentSetScenes,
+  getScene: agentGetScene, dumpScenes: agentDumpScenes, hydrate: agentHydrate, focusScene: agentFocusScene,
+  bakeBegin: agentBakeBegin, bakePrepare: agentBakePrepare, bakeFrame: agentBakeFrame, bakeEnd: agentBakeEnd};
 
 /* ==================== coverage generator ==================== */
 function applyCamDef(cdef){
@@ -2876,7 +3267,9 @@ document.getElementById("binCoverage").addEventListener("click", function(){
   var firstIdx = bin.length;
   defs.forEach(function(def){
     applyCamDef(def);
-    bin.push({name:def.name, data:shotData(), thumb:binThumb()});
+    var s = {name:def.name, data:shotData(), thumb:binThumb(), prompt:composePrompt(true)};
+    agentEnsureSceneId(s);
+    bin.push(s);
   });
   setAngle(orig.angle); setDist(orig.dist); setHeight(orig.h); setDutch(orig.dutch);
   setAimH(orig.aimH); setPanT(orig.panT); setTiltT(orig.tiltT);
@@ -2886,6 +3279,7 @@ document.getElementById("binCoverage").addEventListener("click", function(){
   syncRec(); renderCards(); buildPrompt();
   binSel = firstIdx;
   renderBin();
+  backlotNotifyScenesChanged();
   showToast(defs.length + " COVERAGE SETUPS BINNED");
 });
 

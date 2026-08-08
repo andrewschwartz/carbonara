@@ -180,7 +180,8 @@ final class ToolExecutor {
     private static func canReadInactiveProject(_ tool: ToolName) -> Bool {
         switch tool {
         case .getTimeline, .inspectTimeline, .getMedia, .inspectMedia, .searchMedia,
-             .getMulticam, .getTranscript, .detectBeats, .inspectColor, .listModels:
+             .getMulticam, .getTranscript, .detectBeats, .inspectColor, .listModels,
+             .getBacklot:
             true
         default:
             false
@@ -265,6 +266,10 @@ final class ToolExecutor {
         case .setProjectSettings: return try setProjectSettings(editor, args)
         case .createTimeline:     return try createTimeline(editor, args)
         case .setActiveTimeline:  return try setActiveTimeline(editor, args)
+        case .getBacklot:       return try await getBacklot(args)
+        case .setBacklotScenes: return try await setBacklotScenes(args)
+        case .buildAnimatic:    return try await buildAnimatic(editor, args)
+        case .generatePhotoreal: return try await generatePhotoreal(editor, args)
         case .readSkill:     return readSkill(args)
         case .manageProject:
             return await manageProject(args)
@@ -360,7 +365,7 @@ func decodeToolArgs<T: DecodableToolArgs>(_ dict: [String: Any], path: String) t
     }
 }
 
-private func firstNonFiniteNumberPath(in value: Any, path: String) -> String? {
+func firstNonFiniteNumberPath(in value: Any, path: String) -> String? {
     if let d = value as? Double, !d.isFinite { return path }
     if let n = value as? NSNumber, !n.doubleValue.isFinite { return path }
     if let arr = value as? [Any] {

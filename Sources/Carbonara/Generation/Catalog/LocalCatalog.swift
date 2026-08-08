@@ -4,7 +4,8 @@ import Foundation
 ///
 /// Replaces the former Convex-streamed catalog. Each entry's `provider` drives routing in
 /// `ProviderRouter`; for fal, the entry `id` is the fal endpoint slug used at
-/// `https://queue.fal.run/{id}`.
+/// `https://queue.fal.run/{id}`, except where `FalRequestBuilder.endpoint` maps one model
+/// to per-mode endpoints (Seedance 2.5).
 ///
 /// NOTE: fal endpoint slugs and per-model input schemas evolve — verify against fal's live
 /// model list (https://fal.ai/models) and adjust `FalRequestBuilder` when a model's inputs differ.
@@ -44,6 +45,26 @@ enum LocalCatalog {
 
     private static let fal: [CatalogEntry] = [
         // Video
+        // One catalog model, three fal endpoints (text/image/reference-to-video);
+        // FalRequestBuilder resolves the endpoint from the submitted inputs.
+        CatalogEntry(
+            id: "bytedance/seedance-2.5",
+            kind: .video,
+            displayName: "Seedance 2.5",
+            provider: "fal",
+            uiCapabilities: .video(videoCaps(
+                durations: Array(4...30),
+                aspectRatios: ["16:9", "9:16", "1:1", "21:9", "4:3", "3:4"],
+                resolutions: ["480p", "720p"],
+                firstFrame: true, lastFrame: true,
+                maxRefImages: 30, maxRefVideos: 10, maxRefAudios: 10,
+                maxTotalRefs: 50,
+                maxCombinedVideoRefSeconds: 30.2, maxCombinedAudioRefSeconds: 30.2,
+                framesAndReferencesExclusive: true,
+                referenceTagNoun: "Image"
+            )),
+            responseShape: .video
+        ),
         CatalogEntry(
             id: "fal-ai/ltx-video-13b-distilled",
             kind: .video,
@@ -132,7 +153,14 @@ enum LocalCatalog {
         resolutions: [String]? = nil,
         firstFrame: Bool = false,
         lastFrame: Bool = false,
-        maxRefImages: Int = 0
+        maxRefImages: Int = 0,
+        maxRefVideos: Int = 0,
+        maxRefAudios: Int = 0,
+        maxTotalRefs: Int? = nil,
+        maxCombinedVideoRefSeconds: Double? = nil,
+        maxCombinedAudioRefSeconds: Double? = nil,
+        framesAndReferencesExclusive: Bool = false,
+        referenceTagNoun: String = "reference"
     ) -> VideoCaps {
         VideoCaps(
             durations: durations,
@@ -141,13 +169,13 @@ enum LocalCatalog {
             supportsFirstFrame: firstFrame,
             supportsLastFrame: lastFrame,
             maxReferenceImages: maxRefImages,
-            maxReferenceVideos: 0,
-            maxReferenceAudios: 0,
-            maxTotalReferences: nil,
-            maxCombinedVideoRefSeconds: nil,
-            maxCombinedAudioRefSeconds: nil,
-            framesAndReferencesExclusive: false,
-            referenceTagNoun: "reference",
+            maxReferenceVideos: maxRefVideos,
+            maxReferenceAudios: maxRefAudios,
+            maxTotalReferences: maxTotalRefs,
+            maxCombinedVideoRefSeconds: maxCombinedVideoRefSeconds,
+            maxCombinedAudioRefSeconds: maxCombinedAudioRefSeconds,
+            framesAndReferencesExclusive: framesAndReferencesExclusive,
+            referenceTagNoun: referenceTagNoun,
             requiresSourceVideo: false,
             requiresReferenceImage: false
         )

@@ -12,6 +12,9 @@ final class BacklotBridge: NSObject, WKScriptMessageHandler {
     static let messageName = "carbonara"
 
     weak var window: NSWindow?
+    /// The project the web bin currently reflects; scene write-through targets this,
+    /// not whatever project is frontmost, so a stale bin can't clobber another project.
+    weak var reflectedEditor: EditorViewModel?
 
     private var importSequence = 0
 
@@ -30,8 +33,92 @@ final class BacklotBridge: NSObject, WKScriptMessageHandler {
         case "importRemote":
             guard let urlString = body["url"] as? String else { return }
             Task { await self.handleRemoteImport(urlString: urlString) }
+        case "scenesChanged":
+            guard let store = body["store"] as? String else { return }
+            persistScenes(storeJSON: store)
+        case "buildAnimatic":
+            Task { await self.handleBuildAnimatic() }
+        case "generatePhotoreal":
+            Task { await self.handleGeneratePhotoreal() }
         default:
             Log.project.warning("backlot bridge received unknown message kind=\(kind)")
+        }
+    }
+
+    // MARK: - Scene store persistence
+
+    private struct SceneStore: Decodable {
+        struct Scene: Decodable {
+            let id: String
+            let name: String
+            let shotData: String
+            let composedPrompt: String
+        }
+        let scenes: [Scene]
+    }
+
+    /// Mirrors the web bin into the reflected project's persisted scene store.
+    /// The project owns the scenes; this projection keeps them in sync on every bin
+    /// change. Writes target the project the bin currently reflects — never the
+    /// frontmost one — so a not-yet-rehydrated bin can't clobber another project.
+    private func persistScenes(storeJSON: String) {
+        guard let editor = reflectedEditor else { return }
+        guard let data = storeJSON.data(using: .utf8),
+              let store = try? JSONDecoder().decode(SceneStore.self, from: data) else {
+            Log.project.warning("backlot scenesChanged: undecodable store bytes=\(storeJSON.utf8.count)")
+            return
+        }
+        let scenes = store.scenes.map {
+            BacklotScene(id: $0.id, name: $0.name, shotData: $0.shotData,
+                         composedPrompt: $0.composedPrompt, createdAt: nil, updatedAt: nil)
+        }
+        guard editor.backlotScenes != scenes else { return }
+        editor.backlotScenes = scenes
+        editor.onProjectCheckpointRequired?()
+    }
+
+    // MARK: - Build animatic
+
+    /// Bakes the current bin onto the active project's "Animatic" timeline. Runs
+    /// the same domain op as the build_animatic tool, so UI and agent share one path.
+    private func handleBuildAnimatic() async {
+        guard let editor = AppState.shared.activeProject?.editorViewModel else {
+            presentError("Open a project to build an animatic.")
+            return
+        }
+        guard !editor.backlotScenes.isEmpty else {
+            presentError("Add shots to the bin before building an animatic.")
+            return
+        }
+        do {
+            let receipt = try await editor.buildBacklotAnimatic()
+            guard AppState.shared.openProjects.contains(where: { $0.editorViewModel === editor }) else { return }
+            editor.mediaPanelToast = "Built \"\(receipt.timelineName)\" — \(receipt.placements.count) shot\(receipt.placements.count == 1 ? "" : "s")."
+        } catch {
+            Log.project.error("backlot build animatic failed: \(Log.detail(error))")
+            presentError(error.localizedDescription)
+        }
+    }
+
+    /// Upgrades the current bin into photoreal Seedance takes on the active project.
+    /// Runs the same domain op as the generate_photoreal tool, so UI and agent share one path.
+    private func handleGeneratePhotoreal() async {
+        guard let editor = AppState.shared.activeProject?.editorViewModel else {
+            presentError("Open a project to generate photoreal shots.")
+            return
+        }
+        guard !editor.backlotScenes.isEmpty else {
+            presentError("Add shots to the bin before generating photoreal footage.")
+            return
+        }
+        do {
+            let receipt = try await editor.generateBacklotPhotoreal()
+            guard AppState.shared.openProjects.contains(where: { $0.editorViewModel === editor }) else { return }
+            let count = receipt.submissions.count
+            editor.mediaPanelToast = "Generating \(count) photoreal shot\(count == 1 ? "" : "s") — check the media panel."
+        } catch {
+            Log.project.error("backlot generate photoreal failed: \(Log.detail(error))")
+            presentError(error.localizedDescription)
         }
     }
 
